@@ -2150,6 +2150,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/anomalies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Freeze-event timeline (ADR-0019).
+         * @description The durable freeze-event mirror (`freeze_events`, ADR-0019):
+         *     every clear→firing price-freeze transition, newest first, plus
+         *     the live firing-now count and a per-reason tally over the
+         *     window. While frozen, `/v1/price` still serves the last good
+         *     value with `flags.frozen=true`; this endpoint is the history +
+         *     current state of those decisions.
+         *
+         *     `?firing=true` restricts the event list to currently-firing
+         *     pairs; `?window_days=` scopes the reason tally (default 30);
+         *     `?limit=` (default 100, max 500). 200 + empty payload when the
+         *     reader isn't wired.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description true → only currently-firing events. */
+                    firing?: boolean;
+                    window_days?: number;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Freeze timeline + firing count + reason tally. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                firing_count?: number;
+                                reason_tally?: {
+                                    reason?: string;
+                                    /** Format: int64 */
+                                    count?: number;
+                                }[];
+                                events?: {
+                                    asset_id?: string;
+                                    quote_id?: string;
+                                    /** Format: date-time */
+                                    frozen_at?: string;
+                                    /** Format: int64 */
+                                    frozen_at_ledger?: number;
+                                    /** @enum {string} */
+                                    reason?: "single_source" | "divergence" | "outlier_storm" | "manual";
+                                    frozen_value?: string;
+                                    /** Format: date-time */
+                                    recovered_at?: string | null;
+                                    /** Format: int64 */
+                                    recovered_at_ledger?: number | null;
+                                    firing?: boolean;
+                                    detail?: Record<string, never>;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/divergence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cross-reference divergence board (ADR-0019).
+         * @description The current divergence board: the latest comparison per
+         *     (asset, quote, reference) over the trailing window, from
+         *     `divergence_observations`. Each row is our VWAP vs one external
+         *     reference (CoinGecko / Chainlink / Reflector DEX·CEX·FX /
+         *     Redstone / Band) with `delta_pct = (our − ref) / ref × 100`.
+         *     Ordered widest |delta_pct| first.
+         *
+         *     A row with `status: firing` breached its per-(reference, pair)
+         *     threshold at its latest observation — the signal behind
+         *     `flags.divergence_warning`. `?firing=true` restricts to those;
+         *     `?window_days=` (default 7); `?limit=` (default 100, max 500).
+         *     200 + empty payload when the reader isn't wired.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description true → only rows whose latest status is firing. */
+                    firing?: boolean;
+                    window_days?: number;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Latest divergence per (pair, reference). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                observations?: {
+                                    asset_id?: string;
+                                    quote_id?: string;
+                                    /** @enum {string} */
+                                    reference?: "chainlink" | "coingecko" | "reflector-cex" | "reflector-fx" | "reflector-dex" | "redstone" | "band";
+                                    /** Format: date-time */
+                                    observed_at?: string;
+                                    /** Format: int64 */
+                                    observed_at_ledger?: number;
+                                    our_price?: string;
+                                    ref_price?: string;
+                                    delta_pct?: string;
+                                    /** @enum {string} */
+                                    status?: "clear" | "firing";
+                                }[];
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/oracle/streams": {
         parameters: {
             query?: never;

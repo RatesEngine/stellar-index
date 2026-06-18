@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/StellarIndex/stellar-index/internal/divergence"
 )
@@ -87,4 +88,70 @@ func (s *DivergenceSink) RecordObservation(ctx context.Context, obs divergence.O
 			obs.Pair.Base.String(), obs.Pair.Quote.String(), obs.Reference, err)
 	}
 	return nil
+}
+
+// DivergenceRow is one divergence_observations row for the /v1/divergence
+// read path. Prices + delta are decimal strings (ADR-0003).
+type DivergenceRow struct {
+	AssetID          string
+	QuoteID          string
+	Reference        string
+	ObservedAt       time.Time
+	ObservedAtLedger int64
+	OurPrice         string
+	RefPrice         string
+	DeltaPct         string
+	Status           string
+}
+
+// ListDivergenceLatest returns the LATEST observation per (asset,
+// quote, reference) within the trailing `sinceDays` window — the
+// current cross-reference divergence board. firingOnly restricts to
+// rows whose latest status is 'firing'. Ordered by |delta_pct| desc so
+// the widest gaps surface first. limit ≤ 500.
+//
+// DISTINCT ON (asset, quote, reference) with the matching ORDER prefix
+// uses the (asset, quote, reference, observed_at DESC) index to pick
+// each triple's newest row without a separate sort.
+func (s *Store) ListDivergenceLatest(ctx context.Context, sinceDays int, firingOnly bool, limit int) ([]DivergenceRow, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if sinceDays <= 0 {
+		sinceDays = 7
+	}
+	q := `
+		WITH latest AS (
+			SELECT DISTINCT ON (asset_id, quote_id, reference)
+			       asset_id, quote_id, reference, observed_at, observed_at_ledger,
+			       our_price::text, ref_price::text, delta_pct::text, status
+			  FROM divergence_observations
+			 WHERE observed_at > now() - ($1 || ' days')::interval
+			 ORDER BY asset_id, quote_id, reference, observed_at DESC
+		)
+		SELECT asset_id, quote_id, reference, observed_at, observed_at_ledger,
+		       our_price, ref_price, delta_pct, status
+		  FROM latest`
+	if firingOnly {
+		q += ` WHERE status = 'firing'`
+	}
+	q += ` ORDER BY abs(delta_pct::numeric) DESC LIMIT $2`
+	rows, err := s.db.QueryContext(ctx, q, sinceDays, limit)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: ListDivergenceLatest: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []DivergenceRow
+	for rows.Next() {
+		var r DivergenceRow
+		if err := rows.Scan(&r.AssetID, &r.QuoteID, &r.Reference, &r.ObservedAt,
+			&r.ObservedAtLedger, &r.OurPrice, &r.RefPrice, &r.DeltaPct, &r.Status); err != nil {
+			return nil, fmt.Errorf("timescale: ListDivergenceLatest scan: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: ListDivergenceLatest rows: %w", err)
+	}
+	return out, nil
 }

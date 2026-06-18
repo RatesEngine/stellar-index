@@ -299,6 +299,105 @@ func (s *FreezeEventSink) MarkRecovered(ctx context.Context, asset, quote canoni
 	return nil
 }
 
+// FreezeEventRow is one freeze_events row for the /v1/anomalies read
+// path. RecoveredAt is nil while the freeze is currently firing.
+// Detail is the raw jsonb text (the API passes it through).
+type FreezeEventRow struct {
+	AssetID           string
+	QuoteID           string
+	FrozenAt          time.Time
+	FrozenAtLedger    int64
+	Reason            string
+	FrozenValue       string
+	RecoveredAt       *time.Time
+	RecoveredAtLedger *int64
+	Detail            string // "" when NULL
+}
+
+// ListFreezeEvents returns freeze events newest-first. firingOnly
+// restricts to currently-firing (recovered_at IS NULL) via the
+// partial index; otherwise the full timeline (capped). limit ≤ 500.
+func (s *Store) ListFreezeEvents(ctx context.Context, firingOnly bool, limit int) ([]FreezeEventRow, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	q := `
+		SELECT asset_id, quote_id, frozen_at, frozen_at_ledger, reason,
+		       frozen_value::text,
+		       recovered_at, recovered_at_ledger,
+		       COALESCE(detail::text, '')
+		  FROM freeze_events`
+	if firingOnly {
+		q += ` WHERE recovered_at IS NULL`
+	}
+	q += ` ORDER BY frozen_at DESC LIMIT $1`
+	rows, err := s.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: ListFreezeEvents: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []FreezeEventRow
+	for rows.Next() {
+		var (
+			r         FreezeEventRow
+			recAt     sql.NullTime
+			recLedger sql.NullInt64
+		)
+		if err := rows.Scan(&r.AssetID, &r.QuoteID, &r.FrozenAt, &r.FrozenAtLedger,
+			&r.Reason, &r.FrozenValue, &recAt, &recLedger, &r.Detail); err != nil {
+			return nil, fmt.Errorf("timescale: ListFreezeEvents scan: %w", err)
+		}
+		if recAt.Valid {
+			t := recAt.Time.UTC()
+			r.RecoveredAt = &t
+		}
+		if recLedger.Valid {
+			v := recLedger.Int64
+			r.RecoveredAtLedger = &v
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: ListFreezeEvents rows: %w", err)
+	}
+	return out, nil
+}
+
+// FreezeReasonCount pairs a freeze reason with its count in the window.
+type FreezeReasonCount struct {
+	Reason string
+	Count  int64
+}
+
+// FreezeReasonCounts tallies freezes per reason over the trailing
+// `sinceDays` days (frozen_at within the window). Powers the
+// /anomalies per-reason breakdown.
+func (s *Store) FreezeReasonCounts(ctx context.Context, sinceDays int) ([]FreezeReasonCount, error) {
+	if sinceDays <= 0 {
+		sinceDays = 30
+	}
+	const q = `
+		SELECT reason, count(*)::bigint
+		  FROM freeze_events
+		 WHERE frozen_at > now() - ($1 || ' days')::interval
+		 GROUP BY reason
+		 ORDER BY count(*) DESC`
+	rows, err := s.db.QueryContext(ctx, q, sinceDays)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: FreezeReasonCounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []FreezeReasonCount
+	for rows.Next() {
+		var c FreezeReasonCount
+		if err := rows.Scan(&c.Reason, &c.Count); err != nil {
+			return nil, fmt.Errorf("timescale: FreezeReasonCounts scan: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // encodeFreezeDetail captures the Decision's diagnostic context as
 // the freeze_events.detail jsonb. Loose schema by design — different
 // freeze paths (Phase 1 class-deviation, Phase 2 multi-signal) carry

@@ -1266,6 +1266,110 @@ paths:
                         profit_usd:         { type: string, nullable: true, description: "Attacker-profit estimate; null for arbitrage (not estimated)." }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /anomalies:
+    get:
+      tags: [analytics]
+      summary: Freeze-event timeline (ADR-0019).
+      description: |
+        The durable freeze-event mirror (`freeze_events`, ADR-0019):
+        every clear→firing price-freeze transition, newest first, plus
+        the live firing-now count and a per-reason tally over the
+        window. While frozen, `/v1/price` still serves the last good
+        value with `flags.frozen=true`; this endpoint is the history +
+        current state of those decisions.
+
+        `?firing=true` restricts the event list to currently-firing
+        pairs; `?window_days=` scopes the reason tally (default 30);
+        `?limit=` (default 100, max 500). 200 + empty payload when the
+        reader isn't wired.
+      parameters:
+        - { name: firing, in: query, description: "true → only currently-firing events.", schema: { type: boolean } }
+        - { name: window_days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: Freeze timeline + firing count + reason tally.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      firing_count: { type: integer }
+                      reason_tally:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            reason: { type: string }
+                            count:  { type: integer, format: int64 }
+                      events:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            asset_id:            { type: string }
+                            quote_id:            { type: string }
+                            frozen_at:           { type: string, format: date-time }
+                            frozen_at_ledger:    { type: integer, format: int64 }
+                            reason:              { type: string, enum: [single_source, divergence, outlier_storm, manual] }
+                            frozen_value:        { type: string }
+                            recovered_at:        { type: string, format: date-time, nullable: true }
+                            recovered_at_ledger: { type: integer, format: int64, nullable: true }
+                            firing:              { type: boolean }
+                            detail:              { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /divergence:
+    get:
+      tags: [analytics]
+      summary: Cross-reference divergence board (ADR-0019).
+      description: |
+        The current divergence board: the latest comparison per
+        (asset, quote, reference) over the trailing window, from
+        `divergence_observations`. Each row is our VWAP vs one external
+        reference (CoinGecko / Chainlink / Reflector DEX·CEX·FX /
+        Redstone / Band) with `delta_pct = (our − ref) / ref × 100`.
+        Ordered widest |delta_pct| first.
+
+        A row with `status: firing` breached its per-(reference, pair)
+        threshold at its latest observation — the signal behind
+        `flags.divergence_warning`. `?firing=true` restricts to those;
+        `?window_days=` (default 7); `?limit=` (default 100, max 500).
+        200 + empty payload when the reader isn't wired.
+      parameters:
+        - { name: firing, in: query, description: "true → only rows whose latest status is firing.", schema: { type: boolean } }
+        - { name: window_days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: Latest divergence per (pair, reference).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      observations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            asset_id:           { type: string }
+                            quote_id:           { type: string }
+                            reference:          { type: string, enum: [chainlink, coingecko, reflector-cex, reflector-fx, reflector-dex, redstone, band] }
+                            observed_at:        { type: string, format: date-time }
+                            observed_at_ledger: { type: integer, format: int64 }
+                            our_price:          { type: string }
+                            ref_price:          { type: string }
+                            delta_pct:          { type: string }
+                            status:             { type: string, enum: [clear, firing] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /oracle/streams:
     get:
       tags: [oracle]

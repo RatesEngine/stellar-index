@@ -3,6 +3,8 @@ import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
 
+import { DivergenceFeed } from './DivergenceFeed';
+
 export const metadata: Metadata = {
   alternates: { canonical: '/divergences' },
   title: 'Divergences — cross-reference monitor',
@@ -75,6 +77,8 @@ export default function DivergencesPage() {
           hypertable for the historical trail.
         </p>
       </header>
+
+      <DivergenceFeed />
 
       <Panel
         title="Why we monitor divergence"
@@ -149,19 +153,25 @@ export default function DivergencesPage() {
       </div>
 
       <Panel
-        title="Coming next"
+        title="Reading the board"
         bodyClassName="text-sm text-ink-body space-y-2"
       >
         <p>
-          Live per-(asset, reference) state, time-series of delta %,
-          and per-incident drill-downs all come online once the
-          divergence-observations endpoint ships (Phase 5). The
-          underlying durable mirror is already running — see the
-          freeze + divergence sinks listed in the{' '}
-          <Link href="/research" className="underline decoration-dotted">
-            research index
-          </Link>
-          . Methodology rationale lives in{' '}
+          The board above shows the latest comparison per (pair,
+          reference) over the trailing 7 days, widest gap first. A
+          row marked <strong>firing</strong> breached its
+          per-(reference, pair) threshold at its last observation —
+          that&apos;s what contributes to{' '}
+          <code className="font-mono text-xs">flags.divergence_warning</code>.
+          Δ% is{' '}
+          <code className="font-mono text-xs">(our − reference) / reference × 100</code>;
+          negative means our VWAP sits below the reference.
+        </p>
+        <p>
+          Per-incident time-series drill-downs (delta % over time for one
+          pair/reference) are the next addition — the{' '}
+          <code className="font-mono text-xs">divergence_observations</code>{' '}
+          hypertable already holds every tick. Methodology rationale lives in{' '}
           <Link
             href="/research/adr/0019"
             className="underline decoration-dotted"

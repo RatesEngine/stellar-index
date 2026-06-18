@@ -3,6 +3,8 @@ import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
 
+import { AnomaliesFeed } from './AnomaliesFeed';
+
 export const metadata: Metadata = {
   title: 'Anomalies — freeze and outlier timeline',
   description:
@@ -53,6 +55,8 @@ export default function AnomaliesPage() {
         </p>
       </header>
 
+      <AnomaliesFeed />
+
       <Panel
         title="What freezes a pair"
         bodyClassName="space-y-3"
@@ -93,18 +97,22 @@ export default function AnomaliesPage() {
       </Panel>
 
       <Panel
-        title="Coming next"
+        title="Reading the timeline"
         bodyClassName="text-sm text-ink-body space-y-2"
       >
         <p>
-          Currently-firing list, freeze timeline, per-asset rate,
-          per-reason breakdown, and the calendar heatmap of daily
-          counts all plumb in once the{' '}
-          <code className="font-mono text-xs">/v1/anomalies</code>{' '}
-          endpoint ships (Phase 5). The underlying mirror is already
-          running on r1 — see the freeze-event sink listed in the{' '}
-          <Link href="/research" className="underline decoration-dotted">
-            research index
+          The timeline above is served live from{' '}
+          <code className="font-mono text-xs">/v1/anomalies</code> over the
+          durable <code className="font-mono text-xs">freeze_events</code>{' '}
+          mirror: the firing-now count, the per-reason breakdown (trailing
+          30 days), and every clear→firing transition with its duration and
+          the value served while frozen. A per-incident calendar heatmap of
+          daily counts is the next addition. Methodology rationale lives in{' '}
+          <Link
+            href="/research/adr/0019"
+            className="underline decoration-dotted"
+          >
+            ADR-0019
           </Link>
           .
         </p>

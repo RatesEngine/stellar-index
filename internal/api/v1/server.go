@@ -99,6 +99,8 @@ type Server struct {
 	sourcesStats            SourcesStatsReader
 	lending                 LendingReader
 	mev                     MEVReader
+	anomalies               AnomalyReader
+	divergences             DivergenceReader
 	currencies              CurrenciesReader
 	explorer                ExplorerReader
 	fxHistory               FXHistoryReader
@@ -467,6 +469,14 @@ type Options struct {
 	// feed). Leave nil and the handler serves an empty array.
 	MEV MEVReader
 
+	// Anomalies, when non-nil, backs /v1/anomalies (the durable
+	// freeze-event timeline, ADR-0019). Nil → empty payload.
+	Anomalies AnomalyReader
+
+	// Divergences, when non-nil, backs /v1/divergence (the
+	// per-reference divergence board). Nil → empty payload.
+	Divergences DivergenceReader
+
 	// Currencies, when non-nil, supplies the world fiat-currency
 	// rates snapshot used by /v1/assets fiat rows + chart fiat:fiat
 	// fallback. The standalone /v1/currencies route was removed in
@@ -761,6 +771,8 @@ func New(opts Options) *Server {
 		sourcesStats:            opts.SourcesStats,
 		lending:                 opts.Lending,
 		mev:                     opts.MEV,
+		anomalies:               opts.Anomalies,
+		divergences:             opts.Divergences,
 		currencies:              opts.Currencies,
 		explorer:                opts.Explorer,
 		fxHistory:               opts.FXHistory,
@@ -1170,6 +1182,11 @@ func (s *Server) mountRoutes() { //nolint:funlen // route registration is intent
 
 	// MEV — auto-flagged MEV-event feed (arbitrage cycles today).
 	s.mux.HandleFunc("GET /v1/mev", s.handleMEVEvents)
+
+	// Anomalies + divergence — the freeze timeline + cross-reference
+	// divergence board (ADR-0019).
+	s.mux.HandleFunc("GET /v1/anomalies", s.handleAnomalies)
+	s.mux.HandleFunc("GET /v1/divergence", s.handleDivergence)
 
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.

@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Anomalies + divergence read endpoints (ADR-0019) + live explorer pages.**
+  New `GET /v1/anomalies` (the freeze-event timeline from `freeze_events`:
+  firing-now count + per-reason tally + clear→firing transitions with duration
+  and the value served while frozen) and `GET /v1/divergence` (the current
+  cross-reference board — latest our-VWAP-vs-reference delta per (pair,
+  reference) from `divergence_observations`, widest gap first). Both tables
+  were already populated by the aggregator's sinks; only the read path was
+  missing. The explorer `/anomalies` and `/divergences` pages now render these
+  live instead of "coming next" placeholders. No migration (read-only over
+  existing hypertables).
+
 ## [v0.5.0-rc.119] — 2026-06-18
 
 ### Fixed

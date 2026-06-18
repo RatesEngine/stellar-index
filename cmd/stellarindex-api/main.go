@@ -902,6 +902,8 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SourcesStats: cachedSourcesStats,
 		Lending:      store,
 		MEV:          store,
+		Anomalies:    store,
+		Divergences:  store,
 		Currencies:   newForexAdapter(forexCache),
 		FXHistory:    &fxHistoryReader{store: store},
 		SEP10:        sep10Validator,
