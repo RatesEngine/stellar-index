@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.111] — 2026-06-18
+
 ### Changed
 
 - **Explorer nav restructured toward an entity-centric IA.** The left rail is
