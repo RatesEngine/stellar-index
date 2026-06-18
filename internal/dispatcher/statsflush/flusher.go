@@ -68,6 +68,13 @@ type Options struct {
 // New constructs a Flusher. Logger is required — the flusher logs
 // every tick at DEBUG, plus any postgres write failures at WARN.
 func New(source StatsSource, store *timescale.Store, logger *slog.Logger, opts Options) *Flusher {
+	if logger == nil {
+		// Match the sibling sink constructors (clickhouse.NewLiveSink,
+		// discovery/sorobanevents AsyncSink) which all default the
+		// logger — flushAt derefs it on a background tick, so a nil
+		// would nil-panic minutes after a clean start.
+		logger = slog.Default()
+	}
 	interval := opts.Interval
 	if interval <= 0 {
 		interval = 5 * time.Minute

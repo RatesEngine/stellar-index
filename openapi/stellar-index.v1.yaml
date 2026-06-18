@@ -3143,9 +3143,13 @@ paths:
         user provisioned on the callback (not here), so the same
         flow handles login + signup.
 
+        The email carries both a one-click magic link (consumed by
+        `/auth/callback`) and a 6-digit code (consumed by
+        `/auth/verify-code`) — either signs the user in.
+
         Distinct from `/auth/sep10/*` (programmatic API auth via a
         signed Stellar challenge). This endpoint is the entry point
-        for the cookie-based dashboard SPA at app.stellarindex.io.
+        for the cookie-based in-site dashboard at stellarindex.io/account.
 
         Returns 503 when the deployment hasn't configured the
         dashboard auth flow (api.dashboard.base_url empty).

@@ -720,7 +720,7 @@ Priority-ordered. Each phase ships independently; no big-bang.
 - Backfill: existing API keys → synthesise an `account` per
   unique `identifier`; existing user surface becomes a one-user
   account with `role=owner`
-- Customer dashboard at `app.stellarindex.io`:
+- Customer dashboard in-site at `stellarindex.io/account`:
   - List/mint/edit/revoke keys with names + descriptions
   - Basic usage chart (today + 30d, requests count + error rate)
   - Account profile + email change
@@ -828,7 +828,7 @@ What we already have that we extend, vs what's brand new:
 | `/v1/signup` | email → key, idempotent | 1 | Becomes "create account + first user + first key" |
 | `RateLimitKey` | per-subject Redis counter | 1 | Stays; usage event log is parallel |
 | `StripeWebhookConfig` | `checkout.session.completed` only | 2 | Extend to 6 events; idempotency via `stripe_event_log` |
-| Showcase `/account` | paste-key dashboard | 1 | Replaced by full dashboard at `app.stellarindex.io` |
+| Showcase `/account` | paste-key dashboard | 1 | Replaced by full in-site dashboard at `stellarindex.io/account` |
 | Showcase `/signup` | email → key form | 1 | Becomes magic-link request form |
 | `/v1/account/usage` | always returns `[]` | 1 | Wires up the CAGG-fed reader |
 | `/v1/status` | already shipped | — | Stays as-is |

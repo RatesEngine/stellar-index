@@ -650,23 +650,26 @@ type APIConfig struct {
 	Streaming                      StreamingConfig `toml:"streaming" doc:"Closed-bucket SSE fanout — pairs the API binary republishes to the streaming Hub on every new closed prices_1m bucket. Empty Pairs leaves /v1/price/stream returning 503; Hub still constructs so subscribers can connect (and immediately drop) without a panic."`
 	Stripe                         StripeConfig    `toml:"stripe" doc:"Stripe webhook handler — paid-tier upgrades wired to POST /v1/webhooks/stripe. Empty signing_secret leaves the endpoint 503."`
 	PrometheusURL                  string          `toml:"prometheus_url" doc:"Prometheus HTTP API root (e.g. http://localhost:9090) backing /v1/status. Empty leaves /v1/status serving an in-process surface (uptime + region only)." default:""`
-	Dashboard                      DashboardConfig `toml:"dashboard" doc:"Customer dashboard auth flow — magic-link email login + cookie sessions backing the dashboard SPA at app.stellarindex.io. Empty leaves /v1/auth/{login,callback,logout} returning 503."`
+	Dashboard                      DashboardConfig `toml:"dashboard" doc:"Customer dashboard auth flow — passwordless email login (6-digit code + magic link) + cookie sessions backing the in-site dashboard at stellarindex.io/account. Empty leaves /v1/auth/{login,callback,verify-code,logout} returning 503."`
 }
 
-// DashboardConfig wires the magic-link email login flow + cookie
-// sessions for the customer dashboard at app.stellarindex.io.
+// DashboardConfig wires the passwordless email login flow (6-digit
+// code + magic link) + cookie sessions for the in-site customer
+// dashboard at stellarindex.io/account. (The standalone
+// app.stellarindex.io SPA was retired 2026-06-17; the dashboard now
+// lives on the explorer apex — see docs/operations/cf-pages-setup.md.)
 //
 // Empty (no BaseURL or no Resend API key) leaves the auth
 // endpoints unwired; main.go logs a warn at startup and the
-// dashboard SPA deployment is responsible for showing a "coming
-// soon" surface until the operator has configured these.
+// explorer renders a signed-out surface until the operator has
+// configured these.
 //
 // The Resend API key lives in an env var (default
 // STELLARINDEX_RESEND_API_KEY) so it doesn't sit in the TOML
 // alongside non-secret config — same pattern as
 // StripeConfig.SigningSecret.
 type DashboardConfig struct {
-	BaseURL string `toml:"base_url" doc:"Absolute URL of the customer dashboard SPA (e.g. https://app.stellarindex.io). The magic-link callback URL embedded in emails is {base_url}/auth/callback?token=<plaintext>." default:""`
+	BaseURL string `toml:"base_url" doc:"Absolute URL of the explorer hosting the in-site dashboard (e.g. https://stellarindex.io). The magic-link callback URL embedded in emails is {base_url}/auth/callback?token=<plaintext>, and the post-login redirect lands on {base_url}/account." default:""`
 
 	EmailFrom string `toml:"email_from" doc:"From: address for transactional emails (e.g. 'Stellar Index <hello@stellarindex.io>'). Must match a domain Resend has verified for the configured API key." default:"Stellar Index <hello@stellarindex.io>"`
 

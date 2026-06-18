@@ -15,7 +15,24 @@ against.
 
 ## [Unreleased]
 
-## [v0.5.0-rc.110] — 2026-06-18
+### Fixed
+
+- **Doc/config drift: the dashboard SPA at `app.stellarindex.io` was retired
+  (2026-06-17) into the in-site `stellarindex.io/account`, but config doc-strings,
+  handler comments, the OpenAPI `/auth/login` description, `package.json`, and
+  three architecture docs still pointed at the dead host (one with a dead
+  `web/dashboard/README.md` link).** Updated to reality and regenerated the
+  spec-derived artifacts.
+- **Hardened against the `nil-Now`-class latent panic found in dashboard auth.**
+  A codebase sweep for the same pattern (a dependency dereferenced on a path
+  that didn't guard/​default it) surfaced three latent cases, all now closed:
+  `lookupUSDPrice` derefed the optional `Prices` reader unguarded on the
+  `populateChange24h` path (the sibling `populatePriceUSD` guarded it) — and
+  since asset-detail fields populate on child goroutines that
+  `middleware.Recoverer` can't cover, an unguarded panic there would crash the
+  whole API process; the `run()` helper now recovers per-goroutine. The
+  `statsflush` and `supply` refresher constructors now default a nil logger like
+  their siblings (both deref it on a background tick).
 
 ### Fixed
 

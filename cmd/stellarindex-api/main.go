@@ -598,11 +598,12 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		logger.Info("status backend wired", "prometheus_url", cfg.API.PrometheusURL)
 	}
 
-	// Customer-dashboard magic-link auth + key-management surface.
-	// Empty BaseURL leaves the dashboard auth flow off — the
+	// Customer-dashboard email-code/magic-link auth + key-management
+	// surface. Empty BaseURL leaves the dashboard auth flow off — the
 	// routes simply aren't mounted. This is the expected pre-launch
-	// shape: dashboard SPA ships standalone-preview with mocked
-	// auth until operator configures Resend + app.stellarindex.io.
+	// shape: the explorer renders a signed-out surface until the
+	// operator configures Resend + the dashboard base_url (the in-site
+	// dashboard at stellarindex.io/account).
 	dashboardBundle, err := buildDashboardBundle(cfg.API.Dashboard, store.DB(), rdb, logger)
 	if err != nil {
 		return fmt.Errorf("dashboard: %w", err)

@@ -407,6 +407,28 @@ func TestChange24hPct_HappyPath(t *testing.T) {
 	mustContain(t, body, `"change_24h_pct":"+1.81"`)
 }
 
+// TestChange24hPct_NilPriceReader_NoPanic — Options documents Prices
+// as independently optional ("nil → 503"), so a Prices==nil but
+// Change24h!=nil wiring is legal. populateChange24h reaches the price
+// lookup on a child goroutine (no middleware.Recoverer cover), so a
+// missing nil-guard there would crash the whole API process, not 500
+// one request. Regression for that latent panic: the request must
+// serve cleanly with the field simply absent.
+func TestChange24hPct_NilPriceReader_NoPanic(t *testing.T) {
+	change24hStub := &stubChange24hReader{prices: map[string]string{"native": "0.07"}}
+	srv := v1.New(v1.Options{Change24h: change24hStub}) // Prices left nil
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	body, _ := readAll(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d (a nil price reader must not panic the populate goroutine)", resp.StatusCode)
+	}
+	if strings.Contains(body, `"change_24h_pct"`) {
+		t.Errorf("change_24h_pct should be absent without a price reader; body=%s", body)
+	}
+}
+
 // TestChange24hPct_NoComparisonBucket — asset has a current price
 // but the 24h-ago window is empty (asset first traded < 24h ago,
 // or pruned). ErrChange24hUnavailable is silent — field absent on

@@ -119,6 +119,16 @@ func (s *Server) applyF2Fields(ctx context.Context, detail *AssetDetail, asset c
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// These run on child goroutines, which middleware.Recoverer
+			// does NOT cover — an unrecovered panic here takes down the
+			// whole API process, not just this request. Each populate*
+			// is best-effort (failure → field stays null), so a panic
+			// degrades to the same: log it and leave the field unset.
+			defer func() {
+				if p := recover(); p != nil {
+					s.logger.Error("panic in asset-detail field populator", "panic", p)
+				}
+			}()
 			fn()
 		}()
 	}
@@ -270,6 +280,13 @@ func (s *Server) populateMarketCap(ctx context.Context, detail *AssetDetail, ass
 // priceFallback isn't reachable (the supply / change-24h paths
 // bypass the /v1/price handler entirely).
 func (s *Server) lookupUSDPrice(ctx context.Context, asset canonical.Asset) (string, bool) {
+	if s.prices == nil {
+		// Options documents Prices as independently optional ("nil →
+		// 503"); populatePriceUSD guards this, but populateChange24h
+		// reaches us via a different path. Guard here so a
+		// Prices==nil,Change24h!=nil wiring can't nil-panic.
+		return "", false
+	}
 	if asset.Equal(defaultPriceQuote) {
 		// fiat:USD priced against fiat:USD is meaningless;
 		// short-circuit before the reader rejects it.

@@ -90,10 +90,11 @@ type Config struct {
 	// target email. nil = no throttle (only the global anon
 	// rate-limit applies). audit-2026-06-14 A12.
 	LoginThrottle LoginThrottle
-	// DashboardBaseURL is the absolute URL of the customer
-	// dashboard SPA (typically https://app.stellarindex.io).
+	// DashboardBaseURL is the absolute URL of the explorer hosting
+	// the in-site dashboard (typically https://stellarindex.io).
 	// The magic-link callback URL embedded in emails is
-	// `{DashboardBaseURL}/auth/callback?token=<plaintext>`.
+	// `{DashboardBaseURL}/auth/callback?token=<plaintext>` and the
+	// post-login redirect lands on `{DashboardBaseURL}/account`.
 	DashboardBaseURL string
 	// EmailFrom is the From: address (e.g.
 	// `Stellar Index <hello@stellarindex.io>`).
@@ -107,9 +108,10 @@ type Config struct {
 	// = true; local dev = false (the dashboard runs over
 	// http://localhost during dev).
 	CookieSecure bool
-	// CookieDomain — empty = host-only cookie (recommended for
-	// app.stellarindex.io). Set to ".stellarindex.io" if a
-	// future surface needs the cookie shared across subdomains.
+	// CookieDomain — empty = host-only cookie scoped to the API
+	// host. Set to ".stellarindex.io" (as prod does) so the apex
+	// explorer and the api subdomain share the session cookie on
+	// credentialed cross-origin requests.
 	CookieDomain string
 }
 

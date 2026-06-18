@@ -9,8 +9,9 @@ status: planning
 **Codename:** none yet — referred to as "the showcase" in this doc.
 **Domain:** `stellarindex.io` for the site (live on Cloudflare
 Pages). `docs.stellarindex.io` serves the auto-generated API
-reference. The user dashboard at `app.stellarindex.io` is a
-separate Next.js app under [`web/dashboard/`](../../web/dashboard/README.md).
+reference. The user dashboard is in-site at `stellarindex.io/account`
+(the standalone `app.stellarindex.io` SPA was retired 2026-06-17 —
+see [`docs/operations/cf-pages-setup.md`](../operations/cf-pages-setup.md)).
 
 This doc is the **single planning artefact** for the user-facing
 explorer. It captures: who it's for, the design principles, the URL

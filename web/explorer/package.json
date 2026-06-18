@@ -2,7 +2,7 @@
   "name": "@stellarindex/explorer",
   "version": "0.0.0",
   "private": true,
-  "description": "Public showcase site for the Stellar Index API (app.stellarindex.io).",
+  "description": "Public showcase site + explorer for the Stellar Index API (stellarindex.io).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

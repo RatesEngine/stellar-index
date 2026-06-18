@@ -165,6 +165,11 @@ func WithStrictFreshnessRequired(strict bool) RefresherOption {
 
 // NewRefresher constructs the Refresher.
 func NewRefresher(ledgers LedgerLookup, computer SnapshotComputer, inserter SnapshotInserter, logger *slog.Logger, opts ...RefresherOption) *Refresher {
+	if logger == nil {
+		// Tick derefs the logger on a background timer; default it so a
+		// nil can't nil-panic the refresh goroutine minutes after boot.
+		logger = slog.Default()
+	}
 	r := &Refresher{
 		ledgers:              ledgers,
 		computer:             computer,
