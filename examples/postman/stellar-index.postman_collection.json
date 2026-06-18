@@ -9050,7 +9050,7 @@
               "request": {
                 "name": "Issuer detail — auth flags, SEP-1 metadata, issued assets.",
                 "description": {
-                  "content": "Returns the row from the `issuers` table joined with the\nlist of every classic asset this G-account has ever issued.\nAuth flags + SEP-1 payload land per-issuer as the SEP-1\nfetcher worker resolves them (Phase 4); fields stay null\nuntil then.\n\nPowers the showcase `/coins/{slug}` issuer card and\n`/issuers/{G-strkey}` detail page.\n",
+                  "content": "Returns the row from the `issuers` table joined with the\nlist of every classic asset this G-account has ever issued.\nAuth flags + SEP-1 payload land per-issuer as the SEP-1\nfetcher worker resolves them (Phase 4); fields stay null\nuntil then.\n\nPowers the explorer's `/issuers/{g_strkey}` detail page.\n",
                   "type": "text/plain"
                 },
                 "url": {

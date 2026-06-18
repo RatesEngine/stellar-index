@@ -1321,8 +1321,7 @@ paths:
         fetcher worker resolves them (Phase 4); fields stay null
         until then.
 
-        Powers the showcase `/coins/{slug}` issuer card and
-        `/issuers/{G-strkey}` detail page.
+        Powers the explorer's `/issuers/{g_strkey}` detail page.
       parameters:
         - name: g_strkey
           in: path
