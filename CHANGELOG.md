@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.110] — 2026-06-18
+
 ### Fixed
 
 - **Dashboard sign-in was completely broken — every authenticated request
