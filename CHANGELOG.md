@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.118] — 2026-06-18
+
 ### Changed
 
 - **ADR-0027 (LCM cache tiering) accepted.** The dual-source read path +
