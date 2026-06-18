@@ -249,7 +249,7 @@ if [ -d docs/adr ]; then
       err "ADR '$adr' has invalid status '$status' (must be Proposed|Accepted|Superseded|Rejected)"
     fi
     superseded_by=$(awk '/^superseded_by:/{print $2; exit}' "$adr" | tr -d '"')
-    if [ "$status" = "Superseded" ] && [ "$superseded_by" = "null" -o -z "$superseded_by" ]; then
+    if [ "$status" = "Superseded" ] && { [ "$superseded_by" = "null" ] || [ -z "$superseded_by" ]; }; then
       err "ADR '$adr' marked Superseded but 'superseded_by' is null"
     fi
   done
