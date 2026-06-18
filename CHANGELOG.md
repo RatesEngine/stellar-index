@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.121] — 2026-06-19
+
 ### Added
 
 - **Real Blend per-pool TVL / utilization / APY (ADR-0039, #84 complete).** New
