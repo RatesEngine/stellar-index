@@ -21,6 +21,7 @@ import {
   LogOut,
   Network,
   Radio,
+  Receipt,
   Settings,
   Share2,
   ShieldCheck,
@@ -48,6 +49,7 @@ const NAV: NavGroup[] = [
   {
     items: [
       { href: '/', label: 'Home', icon: LayoutDashboard, exact: true },
+      { href: '/transactions', label: 'Transactions', icon: Receipt },
       { href: '/ledgers', label: 'Ledgers', icon: Blocks },
       { href: '/accounts', label: 'Accounts', icon: Wallet },
       { href: '/issuers', label: 'Issuers', icon: BadgeCheck },
