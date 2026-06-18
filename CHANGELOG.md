@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.117] — 2026-06-18
+
 ### Added
 
 - **Accounts directory ranked by USD wealth.** New `GET /v1/accounts` ranks
