@@ -32,7 +32,13 @@ mkdir -p examples/postman
 
 # openapi-to-postmanv2 prints a sub-summary on success; pipe to
 # /dev/null and rely on the exit code so this is silent on success.
+#
+# NODE_OPTIONS preloads postman-seed-random.js to make the converter's
+# json-schema-faker deterministic (it otherwise Math.random()s its way
+# through enum/format example values, so every run produced a different
+# collection and the committed artifact silently drifted).
 TMP=$(mktemp)
+NODE_OPTIONS="--require ${REPO_ROOT}/scripts/dev/postman-seed-random.js" \
 npx --yes "openapi-to-postmanv2@${CONVERTER_VERSION}" \
     -s openapi/stellar-index.v1.yaml \
     -o "$TMP" \
@@ -40,10 +46,11 @@ npx --yes "openapi-to-postmanv2@${CONVERTER_VERSION}" \
     >/dev/null
 
 # openapi-to-postmanv2 stamps a fresh UUIDv4 into every "id" field
-# on every run. Postman doesn't need them — it regenerates IDs on
-# import — and the noise makes the file unmergeable. Strip them
-# so the diff is meaningful (only changes when the openapi spec
-# itself changes).
+# (and a "_postman_id" at the collection root, sourced from crypto so
+# the Math.random seed above doesn't cover it) on every run. Postman
+# doesn't need them — it regenerates IDs on import — and the noise
+# makes the file unmergeable. Strip both so the diff is meaningful
+# (only changes when the openapi spec itself changes).
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq not found — install jq (https://stedolan.github.io/jq/) for ID-stripping"
   exit 1
@@ -51,7 +58,7 @@ fi
 
 CANONICAL="examples/postman/stellar-index.postman_collection.json"
 
-jq 'walk(if type == "object" and has("id") then del(.id) else . end)' "$TMP" \
+jq 'walk(if type == "object" then (del(.id) | del(._postman_id)) else . end)' "$TMP" \
   > "$CANONICAL"
 rm -f "$TMP"
 
