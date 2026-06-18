@@ -6,7 +6,6 @@ import {
   Activity,
   ArrowLeftRight,
   BadgeCheck,
-  BarChart3,
   Blocks,
   BookOpen,
   Boxes,
@@ -20,11 +19,11 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Network,
   Radio,
   Settings,
   Share2,
   ShieldCheck,
-  Tag,
   TrendingUp,
   User,
   Wallet,
@@ -40,41 +39,41 @@ import { SearchModal } from './SearchModal';
 type NavItem = { href: string; label: string; icon: LucideIcon; external?: boolean; exact?: boolean };
 type NavGroup = { title?: string; items: NavItem[] };
 
-// The console IA — grouped so a data-heavy site stays navigable.
+// The console IA — an entity-centric explorer. Grouped so a data-heavy
+// site stays navigable. Secondary/marketing pages (Pricing, Methodology,
+// Diagnostics, Sources, the CEX board) live in the footer + search, not
+// the primary rail. Transactions / Contracts / SDEX Markets land here as
+// their pages ship (kept out until then so there are no dead links).
 const NAV: NavGroup[] = [
-  { items: [{ href: '/', label: 'Overview', icon: LayoutDashboard }] },
   {
-    title: 'Markets',
     items: [
+      { href: '/', label: 'Home', icon: LayoutDashboard, exact: true },
+      { href: '/ledgers', label: 'Ledgers', icon: Blocks },
+      { href: '/accounts', label: 'Accounts', icon: Wallet },
+      { href: '/issuers', label: 'Issuers', icon: BadgeCheck },
       { href: '/assets', label: 'Assets', icon: Coins },
-      { href: '/markets', label: 'Markets', icon: BarChart3 },
-      { href: '/exchanges', label: 'Exchanges', icon: Building2 },
-      { href: '/dexes', label: 'DEXes', icon: ArrowLeftRight },
-      { href: '/aggregators', label: 'Aggregators', icon: Share2 },
-      { href: '/oracles', label: 'Oracles', icon: Radio },
+      { href: '/dexes', label: 'AMM Pools', icon: Boxes },
     ],
   },
   {
     title: 'Protocols',
     items: [
-      { href: '/protocols', label: 'Protocols', icon: Boxes },
+      { href: '/protocols', label: 'DEX / AMM', icon: ArrowLeftRight },
       { href: '/lending', label: 'Lending', icon: Landmark },
-      { href: '/sources', label: 'Sources', icon: Activity },
+      { href: '/aggregators', label: 'Aggregators', icon: Share2 },
+      { href: '/bridges', label: 'Bridges', icon: Network },
+      { href: '/oracles', label: 'Oracles', icon: Radio },
+      { href: '/protocols/soroswap-router', label: 'Soroswap Router', icon: Boxes },
     ],
   },
   {
-    title: 'Network',
-    items: [
-      { href: '/ledgers', label: 'Ledgers', icon: Blocks },
-      { href: '/accounts', label: 'Accounts', icon: Wallet },
-      { href: '/issuers', label: 'Issuers', icon: BadgeCheck },
-    ],
+    items: [{ href: '/exchanges', label: 'External Markets', icon: Building2 }],
   },
   {
     title: 'Analytics',
     items: [
       { href: '/anomalies', label: 'Anomalies', icon: Zap },
-      { href: '/divergences', label: 'Divergences', icon: GitCompare },
+      { href: '/divergences', label: 'Divergence', icon: GitCompare },
       { href: '/mev', label: 'MEV', icon: Activity },
     ],
   },
@@ -83,9 +82,6 @@ const NAV: NavGroup[] = [
     items: [
       { href: 'https://docs.stellarindex.io', label: 'API docs', icon: BookOpen, external: true },
       { href: '/sdk', label: 'SDK', icon: Code2 },
-      { href: '/pricing', label: 'Pricing', icon: Tag },
-      { href: '/methodology', label: 'Methodology', icon: BookOpen },
-      { href: '/diagnostics', label: 'Diagnostics', icon: Activity },
       { href: 'https://status.stellarindex.io', label: 'Status', icon: Activity, external: true },
     ],
   },

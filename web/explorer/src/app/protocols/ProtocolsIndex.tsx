@@ -36,9 +36,24 @@ interface ProtocolCard {
  * the grid. Falls back to the static registry (always-rendered cards,
  * zeroed stats) when the directory endpoint is unreachable, so the
  * pillar never renders empty.
+ *
+ * When `lockedCategory` is set (e.g. the /bridges, /oracles category
+ * landings), the grid is pinned to that one category, the chip row is
+ * hidden, and the caller's header text is used — so a category page is a
+ * one-liner over this component rather than a near-duplicate.
  */
-export function ProtocolsIndex() {
-  const [filter, setFilter] = useState<string>('');
+export function ProtocolsIndex({
+  lockedCategory,
+  eyebrow = 'Directory',
+  title = 'Protocols',
+  description = 'Every major Stellar protocol we index — DEXes, AMMs, lending, yield vaults, bridges and oracles. Each protocol page carries its full contract roster, the distribution of every event type it emits, and a verified-completeness verdict against the certified ledger lake. Click a card to drill in.',
+}: {
+  lockedCategory?: string;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+} = {}) {
+  const [filter, setFilter] = useState<string>(lockedCategory ?? '');
 
   const { data, isError } = useQuery<ProtocolCard[]>({
     queryKey: ['/v1/protocols'],
@@ -73,21 +88,17 @@ export function ProtocolsIndex() {
     return Array.from(set).sort();
   }, [cards]);
 
-  const visible = useMemo(
-    () => (filter ? cards.filter((c) => c.category === filter) : cards),
-    [cards, filter],
-  );
+  const visible = useMemo(() => {
+    const cat = lockedCategory ?? filter;
+    return cat ? cards.filter((c) => c.category === cat) : cards;
+  }, [cards, filter, lockedCategory]);
 
   const totalEvents24h = cards.reduce((s, c) => s + (c.events_24h ?? 0), 0);
   const verifiedCount = cards.filter((c) => c.completeness?.complete).length;
 
   return (
     <Container className="space-y-8 py-8 sm:py-10">
-      <PageHeader
-        eyebrow="Directory"
-        title="Protocols"
-        description="Every major Stellar protocol we index — DEXes, AMMs, lending, yield vaults, bridges and oracles. Each protocol page carries its full contract roster, the distribution of every event type it emits, and a verified-completeness verdict against the certified ledger lake. Click a card to drill in."
-      />
+      <PageHeader eyebrow={eyebrow} title={title} description={description} />
 
       <StatGrid cols={3}>
         <StatCell>
@@ -115,7 +126,7 @@ export function ProtocolsIndex() {
         </Callout>
       )}
 
-      {categories.length > 0 && (
+      {!lockedCategory && categories.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-ink-muted">Category:</span>
           <FilterChip active={filter === ''} onClick={() => setFilter('')} label="All" />

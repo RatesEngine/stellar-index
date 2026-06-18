@@ -128,6 +128,7 @@ const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'DEXes', href: '/dexes' },
   { type: 'page', label: 'Lending', href: '/lending' },
   { type: 'page', label: 'Aggregators', href: '/aggregators' },
+  { type: 'page', label: 'Bridges', href: '/bridges', hint: 'CCTP · Rozo' },
   { type: 'page', label: 'Oracles', href: '/oracles' },
   { type: 'page', label: 'Sources', href: '/sources' },
   {

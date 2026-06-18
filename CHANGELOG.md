@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **Explorer nav restructured toward an entity-centric IA.** The left rail is
+  now Explorer entities (Home, Ledgers, Accounts, Issuers, Assets, AMM Pools) →
+  Protocols (DEX/AMM, Lending, Aggregators, Bridges, Oracles, Soroswap Router) →
+  External Markets → Analytics (Anomalies, Divergence, MEV) → Developers (API
+  docs, SDK, Status). Secondary/marketing pages (Pricing, Methodology,
+  Diagnostics, the CEX board) moved to footer + search. First slice of the
+  deep-explorer build; Transactions, Contracts, and a dedicated SDEX order-book
+  view land with their pages next.
+
+### Added
+
+- **`/bridges` page** — cross-chain settlement directory (Circle CCTP v2 + Rozo),
+  a category landing over `/v1/protocols` (reuses the protocol-directory grid).
+
 ### Fixed
 
 - **Deploys silently skipped every migration — the F-1220 auto-apply was a
