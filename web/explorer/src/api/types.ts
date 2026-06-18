@@ -2208,8 +2208,7 @@ export interface paths {
          *     fetcher worker resolves them (Phase 4); fields stay null
          *     until then.
          *
-         *     Powers the showcase `/coins/{slug}` issuer card and
-         *     `/issuers/{G-strkey}` detail page.
+         *     Powers the explorer's `/issuers/{g_strkey}` detail page.
          */
         get: {
             parameters: {
@@ -7187,6 +7186,8 @@ export interface components {
                 "Retry-After"?: number;
                 "X-RateLimit-Limit"?: number;
                 "X-RateLimit-Remaining"?: number;
+                /** @description Unix-epoch seconds at which the current fixed-window bucket resets. Clients compute `seconds_until_reset = X-RateLimit-Reset - now` to back off proactively (GitHub / Twitter header semantics). Emitted on every response, not just 429s. */
+                "X-RateLimit-Reset"?: number;
                 [name: string]: unknown;
             };
             content: {
