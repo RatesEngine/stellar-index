@@ -28,6 +28,10 @@ export const metadata: Metadata = {
   title: 'Stellar Index — system status',
   description: SITE_DESCRIPTION,
   robots: { index: true, follow: true },
+  // Self-canonical for the status home — without it search engines may
+  // treat the trailing-slash / no-slash / index.html variants as
+  // separate pages.
+  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     siteName: 'Stellar Index — status',
@@ -35,13 +39,15 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     url: SITE_URL,
     locale: 'en_US',
+    // PNG, not SVG: Twitter/X, Facebook, LinkedIn, Slack, iMessage all
+    // reject SVG og:images (no raster → no link-preview thumbnail).
     images: [
       {
-        url: '/og.svg',
+        url: '/og.png',
         width: 1200,
         height: 630,
         alt: 'Stellar Index — system status',
-        type: 'image/svg+xml',
+        type: 'image/png',
       },
     ],
   },
@@ -49,7 +55,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Stellar Index — system status',
     description: SITE_DESCRIPTION,
-    images: ['/og.svg'],
+    images: ['/og.png'],
   },
 };
 
