@@ -325,7 +325,7 @@ docs: docs-all ## Alias for docs-all
 docs-all: docs-api docs-config docs-metrics ## Regenerate all reference docs
 
 .PHONY: docs-api
-docs-api: ## Regenerate API reference from openapi/stellar-index.v1.yaml (Redocly via npx — no global install required)
+docs-api: ## Regenerate API reference from openapi/stellar-index.v1.yaml (Scalar static page — no build/install needed, just cp)
 	@./scripts/dev/docs-api.sh
 
 .PHONY: docs-postman

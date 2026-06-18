@@ -51,11 +51,11 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
   [`examples/postman/`](examples/postman/) ships a Postman v2.1
   collection auto-generated from the OpenAPI spec (imports cleanly
   into Postman, Insomnia, and Bruno).
-- **Reference docs:** generated Redocly output at
+- **Reference docs:** generated Scalar output at
   [`docs/reference/api/index.html`](docs/reference/api/index.html)
   (regenerate via `make docs-api`); also published to
-  <https://docs.stellarindex.io> by the
-  [`api-docs` workflow](.github/workflows/api-docs.yml).
+  <https://docs.stellarindex.io> (Cloudflare Pages) by the
+  [`docs-deploy` workflow](.github/workflows/docs-deploy.yml).
 - **Self-hosting:** `make dev` boots the full local stack
   (TimescaleDB + Redis + MinIO). See
   [deploy/docker-compose/dev.yaml](deploy/docker-compose/dev.yaml).
