@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Blend reserves lookup no longer full-scans the lake.** rc.121's
+  `/v1/lending/pools/{pool}/reserves` fanned out one `key_xdr=` lookup per
+  reserve, each a ~20s full scan of the 270M-row `contract_data` set (no
+  skip-index on `key_xdr`) → handler timeout / 500. Rewritten as a SINGLE
+  batched `key_xdr IN (…)` query with `argMax` for the latest version, bounded
+  to a recent ledger window so it's partition-pruned (~6s on r1). An active
+  Blend pool rewrites its reserves continuously so the latest state is always
+  in-window. (A `key_xdr` bloom index would remove the bound + speed the
+  wasm/code-history readers too — deferred; heavy MATERIALIZE on a shared host.)
+
 ## [v0.5.0-rc.121] — 2026-06-19
 
 ### Added

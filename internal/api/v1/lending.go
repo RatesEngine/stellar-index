@@ -150,7 +150,10 @@ func (s *Server) handleLendingPoolReserves(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	// 15s — the reserve lookup is a ledger-windowed scan over the lake's
+	// contract_data (key_xdr has no skip-index yet); ~6-7s on r1, so a
+	// generous ceiling with margin. See BlendPoolReserves.
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
 	assets, err := s.lending.BlendPoolAssets(ctx, pool)

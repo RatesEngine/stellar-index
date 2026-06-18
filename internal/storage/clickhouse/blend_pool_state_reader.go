@@ -21,142 +21,194 @@ type BlendReserveState struct {
 }
 
 // BlendPoolReserves reads the CURRENT reserve state for a Blend pool
-// from the lake (ADR-0039): for each reserve asset it point-looks-up
-// the latest ResData + ResConfig contract_data entries by exact
-// key_xdr, decodes them, reads the pool's backstop take rate from
-// instance storage, and derives TVL/utilisation/APY metrics. Assets
-// the caller doesn't supply, or reserves with no captured entry, are
-// simply absent from the result.
+// from the lake (ADR-0039). It builds every storage key it needs up
+// front — ResData + ResConfig per reserve asset, plus the pool's
+// instance entry (for the backstop take rate) — and fetches them in a
+// SINGLE batched `key_xdr IN (...)` query (one columnar pass over
+// contract_data, not one scan per key). Assets the caller doesn't
+// supply, or reserves with no captured entry, are simply absent.
 func (r *ExplorerReader) BlendPoolReserves(ctx context.Context, pool string, assets []string) ([]BlendReserveState, error) {
 	poolID, err := contractIDFromStrkey(pool)
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse: blend pool id %q: %w", pool, err)
 	}
-	bstop := r.blendBackstopRate(ctx, poolID) // 0 when unavailable → supply APR = gross
 
+	keys, refByKey := blendReserveKeys(poolID, assets)
+	if len(keys) == 0 {
+		return nil, nil
+	}
+
+	// One batched lookup: latest entry_xdr per key (argMax over the
+	// ReplacingMergeTree versions). Bounded to a recent ledger window
+	// so it's partition-pruned (intDiv 1M) instead of full-scanning the
+	// ~270 M-row contract_data set — `key_xdr` has no skip-index, so an
+	// unbounded `key_xdr IN (…)` is a ~20 s full scan. An active Blend
+	// pool rewrites its reserve entries on nearly every interaction, so
+	// the latest state is always within this window; a reserve untouched
+	// for longer is reported as absent (consistent with "captured
+	// window"). A bloom_filter index on key_xdr would remove the bound
+	// (and speed the wasm/code-history readers too) — deferred (heavy
+	// MATERIALIZE over a shared host).
+	const reserveWindowLedgers = 250_000 // ~14 days at 5s
+	const q = `SELECT key_xdr, argMax(entry_xdr, ledger_seq)
+		FROM stellar.ledger_entry_changes
+		WHERE entry_type = 'contract_data'
+		  AND ledger_seq > (SELECT max(ledger_seq) FROM stellar.ledger_entry_changes) - ?
+		  AND key_xdr IN (?) AND entry_xdr != ''
+		GROUP BY key_xdr`
+	rows, err := r.conn.Query(ctx, q, uint32(reserveWindowLedgers), keys)
+	if err != nil {
+		return nil, fmt.Errorf("clickhouse: blend reserves lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	parts, bstop, err := scanBlendReserveParts(rows, refByKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assemble in the caller's asset order; a reserve needs both
+	// ResData + ResConfig to produce metrics.
 	out := make([]BlendReserveState, 0, len(assets))
 	for _, asset := range assets {
-		assetID, err := contractIDFromStrkey(asset)
-		if err != nil {
-			continue // skip non-contract reserve identifiers
-		}
-		dataKey, err := poolDataKeyXDR(poolID, "ResData", assetID)
-		if err != nil {
-			continue
-		}
-		cfgKey, err := poolDataKeyXDR(poolID, "ResConfig", assetID)
-		if err != nil {
-			continue
-		}
-		dataVal, ok, err := r.latestContractDataVal(ctx, dataKey)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		cfgVal, ok, err := r.latestContractDataVal(ctx, cfgKey)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		rd, err := blend.DecodeReserveData(dataVal)
-		if err != nil {
-			continue
-		}
-		rc, err := blend.DecodeReserveConfig(cfgVal)
-		if err != nil {
+		p := parts[asset]
+		if p == nil || p.data == nil || p.config == nil {
 			continue
 		}
 		out = append(out, BlendReserveState{
 			Pool:    pool,
 			Asset:   asset,
-			Data:    rd,
-			Config:  rc,
-			Metrics: blend.Metrics(rd, rc, bstop),
+			Data:    *p.data,
+			Config:  *p.config,
+			Metrics: blend.Metrics(*p.data, *p.config, bstop),
 		})
 	}
 	return out, nil
 }
 
-// blendBackstopRate reads the pool's PoolConfig.bstop_rate (7 decimals)
-// from the contract INSTANCE storage map (Symbol "Config"). Returns 0
-// on any miss — the supply-APR computation then reports the gross rate
-// (the caller can note the backstop take is unaccounted).
-func (r *ExplorerReader) blendBackstopRate(ctx context.Context, poolID xdr.ContractId) uint32 {
-	keys, err := instanceKeyXDR(xdr.Hash(poolID))
-	if err != nil {
-		return 0
+// keyRef maps a built storage key back to what it is.
+type keyRef struct {
+	asset string
+	kind  string // "ResData" | "ResConfig" | "Instance"
+}
+
+// blendReserveKeys builds every storage key BlendPoolReserves needs —
+// the pool instance entry (for the backstop rate) + ResData/ResConfig
+// per reserve asset — and a reverse index from key to (asset, kind).
+func blendReserveKeys(poolID xdr.ContractId, assets []string) ([]string, map[string]keyRef) {
+	refByKey := make(map[string]keyRef)
+	keys := make([]string, 0, len(assets)*2+2)
+	if instanceKeys, err := instanceKeyXDR(xdr.Hash(poolID)); err == nil {
+		for _, k := range instanceKeys {
+			refByKey[k] = keyRef{kind: "Instance"}
+			keys = append(keys, k)
+		}
 	}
-	const q = `SELECT entry_xdr FROM stellar.ledger_entry_changes
-		WHERE entry_type = 'contract_data' AND key_xdr IN (?) AND entry_xdr != ''
-		ORDER BY ledger_seq DESC, ingested_at DESC LIMIT 1`
-	rows, err := r.conn.Query(ctx, q, keys)
-	if err != nil {
-		return 0
+	for _, asset := range assets {
+		assetID, err := contractIDFromStrkey(asset)
+		if err != nil {
+			continue
+		}
+		for _, kind := range []string{"ResData", "ResConfig"} {
+			k, err := poolDataKeyXDR(poolID, kind, assetID)
+			if err != nil {
+				continue
+			}
+			refByKey[k] = keyRef{asset: asset, kind: kind}
+			keys = append(keys, k)
+		}
 	}
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		return 0
+	return keys, refByKey
+}
+
+// scanBlendReserveParts decodes the batched lookup's rows into per-asset
+// ResData/ResConfig parts + the pool's backstop rate.
+func scanBlendReserveParts(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}, refByKey map[string]keyRef,
+) (map[string]*blendReserveParts, uint32, error) {
+	parts := make(map[string]*blendReserveParts)
+	var bstop uint32
+	for rows.Next() {
+		var keyXDR, b64 string
+		if err := rows.Scan(&keyXDR, &b64); err != nil {
+			return nil, 0, fmt.Errorf("clickhouse: scan blend reserve: %w", err)
+		}
+		ref, ok := refByKey[keyXDR]
+		if !ok {
+			continue
+		}
+		val, ok := contractDataValue(b64)
+		if !ok {
+			continue
+		}
+		switch ref.kind {
+		case "Instance":
+			bstop = backstopRateFromInstance(val)
+		case "ResData":
+			if rd, err := blend.DecodeReserveData(val); err == nil {
+				ensureReserve(parts, ref.asset).data = &rd
+			}
+		case "ResConfig":
+			if rc, err := blend.DecodeReserveConfig(val); err == nil {
+				ensureReserve(parts, ref.asset).config = &rc
+			}
+		}
 	}
-	var b64 string
-	if err := rows.Scan(&b64); err != nil {
-		return 0
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("clickhouse: blend reserves rows: %w", err)
 	}
+	return parts, bstop, nil
+}
+
+// blendReserveParts accumulates a reserve's ResData + ResConfig as the
+// batched lookup's rows stream in (they arrive in arbitrary order).
+type blendReserveParts struct {
+	data   *blend.ReserveData
+	config *blend.ReserveConfig
+}
+
+func ensureReserve(m map[string]*blendReserveParts, asset string) *blendReserveParts {
+	if m[asset] == nil {
+		m[asset] = &blendReserveParts{}
+	}
+	return m[asset]
+}
+
+// contractDataValue unmarshals a base64 LedgerEntry and returns its
+// ContractData value ScVal.
+func contractDataValue(b64 string) (xdr.ScVal, bool) {
 	var entry xdr.LedgerEntry
 	if xdr.SafeUnmarshalBase64(b64, &entry) != nil {
-		return 0
+		return xdr.ScVal{}, false
 	}
 	cd, ok := entry.Data.GetContractData()
 	if !ok {
-		return 0
+		return xdr.ScVal{}, false
 	}
-	inst, ok := cd.Val.GetInstance()
+	return cd.Val, true
+}
+
+// backstopRateFromInstance pulls PoolConfig.bstop_rate (7 decimals)
+// from a contract instance entry's storage map (Symbol "Config"). 0 on
+// any miss → the supply-APR is then the gross rate (backstop take
+// unaccounted).
+func backstopRateFromInstance(val xdr.ScVal) uint32 {
+	inst, ok := val.GetInstance()
 	if !ok || inst.Storage == nil {
 		return 0
 	}
 	for _, e := range *inst.Storage {
 		if e.Key.Type == xdr.ScValTypeScvSymbol && e.Key.Sym != nil && string(*e.Key.Sym) == "Config" {
-			pc, err := blend.DecodePoolConfig(e.Val)
-			if err != nil {
-				return 0
+			if pc, err := blend.DecodePoolConfig(e.Val); err == nil {
+				return pc.BstopRate
 			}
-			return pc.BstopRate
+			return 0
 		}
 	}
 	return 0
-}
-
-// latestContractDataVal point-looks-up the newest contract_data entry
-// matching keyXDR and returns its decoded value ScVal. ok=false when no
-// entry matches (reserve not captured / pruned).
-func (r *ExplorerReader) latestContractDataVal(ctx context.Context, keyXDR string) (xdr.ScVal, bool, error) {
-	const q = `SELECT entry_xdr FROM stellar.ledger_entry_changes
-		WHERE entry_type = 'contract_data' AND key_xdr = ? AND entry_xdr != ''
-		ORDER BY ledger_seq DESC, ingested_at DESC LIMIT 1`
-	rows, err := r.conn.Query(ctx, q, keyXDR)
-	if err != nil {
-		return xdr.ScVal{}, false, fmt.Errorf("clickhouse: contract_data lookup: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		return xdr.ScVal{}, false, rows.Err()
-	}
-	var b64 string
-	if err := rows.Scan(&b64); err != nil {
-		return xdr.ScVal{}, false, fmt.Errorf("clickhouse: scan contract_data: %w", err)
-	}
-	var entry xdr.LedgerEntry
-	if xdr.SafeUnmarshalBase64(b64, &entry) != nil {
-		return xdr.ScVal{}, false, nil
-	}
-	cd, ok := entry.Data.GetContractData()
-	if !ok {
-		return xdr.ScVal{}, false, nil
-	}
-	return cd.Val, true, nil
 }
 
 // poolDataKeyXDR builds the base64 LedgerKey for a Blend
