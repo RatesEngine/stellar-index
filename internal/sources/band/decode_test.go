@@ -3,6 +3,7 @@ package band
 import (
 	"encoding/base64"
 	"errors"
+	"math"
 	"math/big"
 	"testing"
 	"time"
@@ -196,6 +197,47 @@ func TestDecodeRelay_FarFutureResolveTimeClampsToClose(t *testing.T) {
 	if !updates[0].Timestamp.Equal(closedAt) {
 		t.Errorf("Timestamp = %v, want ledger close %v (far-future resolve_time should clamp)",
 			updates[0].Timestamp, closedAt)
+	}
+}
+
+// TestDecodeRelay_OverflowResolveTimeClampsToClose covers the u64 values
+// ABOVE math.MaxInt64 (~9.2e18) that the FarFuture test (3e18) does not:
+// these wrap NEGATIVE in the int64() cast and, pre-fix, stamped a
+// far-PAST time (e.g. year -267,666,662,216 for 1e19, or 1969 for
+// MaxUint64) that slipped past the old `ts.After(close+24h)` guard in
+// both directions and overflowed the timestamptz INSERT.
+func TestDecodeRelay_OverflowResolveTimeClampsToClose(t *testing.T) {
+	closedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	for name, resolve := range map[string]uint64{
+		"justOverMaxInt64": uint64(math.MaxInt64) + 1,
+		"1e19wrapsFarPast": 10_000_000_000_000_000_000,
+		"maxUint64to1969":  math.MaxUint64,
+	} {
+		t.Run(name, func(t *testing.T) {
+			args := []string{
+				encodeAddressArg(t, relayerG),
+				encodeSymbolRatesArg(t, []struct {
+					Symbol string
+					Rate   uint64
+				}{
+					{"BTC", 500_000_000_000_000},
+				}),
+				encodeU64Arg(t, resolve),
+				encodeU64Arg(t, 1),
+			}
+			updates, err := decodeRelayArgs(FnRelay, args, adapterC,
+				52_000_000, "abcd", 0, "", "", closedAt)
+			if err != nil {
+				t.Fatalf("decodeRelayArgs: %v", err)
+			}
+			if len(updates) != 1 {
+				t.Fatalf("expected 1 update, got %d", len(updates))
+			}
+			if !updates[0].Timestamp.Equal(closedAt) {
+				t.Errorf("Timestamp = %v, want ledger close %v (>MaxInt64 resolve_time must clamp, not wrap)",
+					updates[0].Timestamp, closedAt)
+			}
+		})
 	}
 }
 

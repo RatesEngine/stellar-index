@@ -110,16 +110,22 @@ func decodeRelayArgs( //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitt
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolve_time: %w", ErrMalformedArgs, err)
 	}
-	ts := time.Unix(int64(resolveSeconds), 0).UTC()
-	// Defensive fallback: a relayer submitting resolve_time=0 (or
-	// pre-epoch values) would stamp a bogus timestamp on the row.
-	// Symmetrically, a sentinel / garbage far-future u64 (e.g.
-	// ~3e18s, the same class as the router deadline_ts overflow) can
-	// overflow timestamptz range and error the whole INSERT. Clamp
-	// both ends to ledger close time. Real-world Band payloads are
-	// always post-2020 UNIX seconds at or before the ledger close.
-	if resolveSeconds < 1_000_000_000 || ts.After(closedAt.Add(sanityFutureWindow)) {
-		ts = closedAt
+	// Defensive fallback: relayer-supplied resolve_time is a u64, so a
+	// garbage value out of the sane window falls back to ledger close.
+	//   - too small (resolve_time=0 / pre-2001) → bogus old timestamp.
+	//   - too large (> close+24h) → far-future sentinel; and crucially
+	//     anything > math.MaxInt64 (~9.2e18) WRAPS NEGATIVE in the
+	//     int64() cast below and would stamp a far-PAST time that
+	//     overflows the timestamptz INSERT — the same overflow class as
+	//     the router deadline_ts bug. (The old guard cast first and
+	//     checked `ts.After(...)`, which the wrapped far-past value
+	//     slips past in both directions.) Bound-checking the RAW u64
+	//     first catches both ends and keeps the cast provably in range.
+	// Real-world Band payloads are post-2020 UNIX seconds ≤ the close.
+	maxResolve := uint64(closedAt.Add(sanityFutureWindow).Unix())
+	ts := closedAt
+	if resolveSeconds >= 1_000_000_000 && resolveSeconds <= maxResolve {
+		ts = time.Unix(int64(resolveSeconds), 0).UTC()
 	}
 
 	usdQuote, err := canonical.NewFiatAsset("USD")
