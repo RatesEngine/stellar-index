@@ -2482,6 +2482,13 @@ func (r storeSupplyLooker) SupplyCoverageStats(ctx context.Context) (timescale.S
 	return r.s.SupplyCoverageStats(ctx)
 }
 
+// DailyCirculatingSupply delegates to the Store's supply_1d CAGG
+// reader (migration 0066), the supply leg of crypto market-cap-over-
+// time on /v1/chart?price_type=market_cap.
+func (r storeSupplyLooker) DailyCirculatingSupply(ctx context.Context, assetKey string, from, to time.Time) ([]timescale.SupplyDayPoint, error) {
+	return r.s.DailyCirculatingSupply(ctx, assetKey, from, to)
+}
+
 // parseStreamingPairs converts the operator-declared
 // `[api.streaming].pairs` TOML rows (each a [base, quote]
 // two-element string array) into canonical Pairs.

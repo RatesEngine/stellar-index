@@ -1466,10 +1466,13 @@ export interface paths {
                      * @description Series type. `vwap` (default) returns the price series.
                      *     `twap` is reserved for forward compatibility (currently
                      *     400). `market_cap` returns a USD-denominated market-cap
-                     *     series for fiat:* base assets (M2 from the verified-
-                     *     currency catalogue × daily FX rate from fx_quotes). Crypto
-                     *     market_cap is deferred until the market_cap_1d CAGG ships
-                     *     (501 today).
+                     *     series. For fiat:* base assets it is M2 (verified-currency
+                     *     catalogue) × daily FX rate (fx_quotes). For on-chain
+                     *     (native / classic / Soroban) base assets it is the daily USD
+                     *     price × daily circulating supply (the `supply_1d` continuous
+                     *     aggregate, forward-filled). Off-chain `crypto:*` reference
+                     *     assets (BTC/ETH/…) have no on-chain supply we publish, so
+                     *     they return an empty series.
                      */
                     price_type?: components["parameters"]["PriceType"];
                 };
@@ -7798,10 +7801,13 @@ export interface components {
          * @description Series type. `vwap` (default) returns the price series.
          *     `twap` is reserved for forward compatibility (currently
          *     400). `market_cap` returns a USD-denominated market-cap
-         *     series for fiat:* base assets (M2 from the verified-
-         *     currency catalogue × daily FX rate from fx_quotes). Crypto
-         *     market_cap is deferred until the market_cap_1d CAGG ships
-         *     (501 today).
+         *     series. For fiat:* base assets it is M2 (verified-currency
+         *     catalogue) × daily FX rate (fx_quotes). For on-chain
+         *     (native / classic / Soroban) base assets it is the daily USD
+         *     price × daily circulating supply (the `supply_1d` continuous
+         *     aggregate, forward-filled). Off-chain `crypto:*` reference
+         *     assets (BTC/ETH/…) have no on-chain supply we publish, so
+         *     they return an empty series.
          */
         PriceType: "vwap" | "twap" | "market_cap";
         TypeFilter: "native" | "classic" | "soroban" | "fiat" | "any";

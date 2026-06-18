@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/StellarIndex/stellar-index/internal/canonical"
+	"github.com/StellarIndex/stellar-index/internal/storage/timescale"
+	"github.com/StellarIndex/stellar-index/internal/supply"
 )
 
 // ChartSeries is the wire shape for /v1/chart. Mirrors the OpenAPI
@@ -463,18 +466,15 @@ func parseChartAssetQuote(w http.ResponseWriter, r *http.Request) (canonical.Ass
 
 // handleChartMarketCap serves /v1/chart?price_type=market_cap.
 //
-// Phase 1 supports fiat assets only:
+// Fiat base (asset=fiat:CNY&quote=fiat:USD): daily series = M2
+// (verified-currency catalogue) × inverse_usd (fx_quotes daily
+// snapshot of 1 CCY → N USD).
 //
-//	asset=fiat:CNY&quote=fiat:USD&price_type=market_cap
+// Non-fiat (on-chain) base: routed to handleChartMarketCapCrypto —
+// daily USD price × daily circulating supply (supply_1d CAGG,
+// migration 0066).
 //
-// Output: daily market-cap series = M2 (verified-currency catalogue)
-// × inverse_usd (fx_quotes daily snapshot of 1 CCY → N USD). Each
-// bucket gets the M2 figure multiplied by the day's FX rate.
-//
-// Crypto assets return 501 — the market_cap_1d CAGG (supply×price
-// join over time) is the proper implementation; this commit ships
-// the fiat fast-path to close the explorer's "market cap over time"
-// gap for the currencies surface.
+// The quote is always fiat:USD (market cap is USD-denominated).
 func (s *Server) handleChartMarketCap(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -491,12 +491,11 @@ func (s *Server) handleChartMarketCap(
 		return
 	}
 
-	// Fiat fast-path. Crypto assets return 501.
+	// Non-fiat (on-chain) base → crypto market-cap-over-time: daily
+	// USD price (the existing prices_1d / stablecoin-proxy series) ×
+	// daily circulating supply (supply_1d CAGG, migration 0066).
 	if pair.Base.Type != canonical.AssetFiat {
-		writeProblem(w, r,
-			"https://api.stellarindex.io/errors/market-cap-deferred",
-			"market_cap for non-fiat assets deferred", http.StatusNotImplemented,
-			"price_type=market_cap is implemented for fiat:* base assets today (M2 × FX rate via fx_quotes). Crypto market-cap-over-time requires a market_cap_1d CAGG joining supply_1d × price_1d; tracked as the supply-CAGG follow-up.")
+		s.handleChartMarketCapCrypto(w, r, pair, tfRaw, from)
 		return
 	}
 
@@ -587,6 +586,137 @@ func emptyMarketCapSeries(pair canonical.Pair, tfRaw, gran string, _ time.Time) 
 		PriceType:   "market_cap",
 		Points:      []HistoryPointWire{},
 	}
+}
+
+// marketCapDecimals is the per-unit scale handleChartMarketCapCrypto
+// divides supply by. 7 is correct for native XLM + every classic
+// asset; SEP-41 Soroban tokens can declare other decimals, but 7 is
+// the Stellar/SAC default and matches the spot market_cap path
+// (populateMarketCap → detail.Decimals defaults to 7), so the chart
+// and the headline cap stay consistent. Refining per-token decimals
+// is the same follow-up the spot path carries.
+const marketCapDecimals = 7
+
+// handleChartMarketCapCrypto serves /v1/chart?price_type=market_cap
+// for an on-chain (native / classic / Soroban) base. Market cap is a
+// daily series: each day's USD price × that day's circulating supply.
+//
+//   - USD price: the existing daily price series the normal chart
+//     serves (prices_1d, with the stablecoin-USD proxy fallback for
+//     the common case where nothing trades directly in fiat:USD).
+//   - circulating supply: the supply_1d CAGG (migration 0066),
+//     forward-filled so a day with a price but no fresh supply
+//     snapshot still gets the most-recent known supply.
+//
+// Off-chain crypto:* reference assets (BTC/ETH/…) have no on-chain
+// supply we publish (supply.AssetKey errors), so they return an empty
+// series rather than a fabricated cap.
+func (s *Server) handleChartMarketCapCrypto(
+	w http.ResponseWriter,
+	r *http.Request,
+	pair canonical.Pair,
+	tfRaw string,
+	from time.Time,
+) {
+	const gran = "1d" // market cap is always a daily series
+
+	if s.history == nil || s.supply == nil {
+		writeProblem(w, r,
+			"https://api.stellarindex.io/errors/market-cap-unavailable",
+			"market_cap not configured", http.StatusServiceUnavailable,
+			"this deployment hasn't wired the history + supply readers needed for crypto market-cap")
+		return
+	}
+
+	supplyKey, err := supply.AssetKey(pair.Base)
+	if err != nil {
+		// Off-chain reference asset — no on-chain supply to multiply.
+		writeJSON(w, emptyMarketCapSeries(pair, tfRaw, gran, from), Flags{})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+
+	// USD price series (daily), with the stablecoin-USD proxy fallback
+	// the normal chart uses when nothing trades directly in fiat:USD.
+	pricePts, err := s.history.HistoryPointsInRange(ctx, pair, gran, from, time.Time{}, historyMaxPoints)
+	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
+		s.logger.Warn("market_cap crypto: price history failed",
+			"asset", pair.Base.String(), "err", err)
+		writeJSON(w, emptyMarketCapSeries(pair, tfRaw, gran, from), Flags{})
+		return
+	}
+	triangulated := false
+	if len(pricePts) == 0 {
+		if fp, ok := s.chartStablecoinFallback(ctx, pair, gran, from); ok {
+			pricePts = fp
+			triangulated = true
+		}
+	}
+
+	// Daily circulating supply (forward-filled via the carry-in row).
+	to := time.Now().UTC().Truncate(24 * time.Hour)
+	supPts, err := s.supply.DailyCirculatingSupply(ctx, supplyKey, from, to)
+	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
+		s.logger.Warn("market_cap crypto: supply history failed",
+			"asset_key", supplyKey, "err", err)
+		writeJSON(w, emptyMarketCapSeries(pair, tfRaw, gran, from), Flags{})
+		return
+	}
+
+	wire := marketCapPoints(pricePts, supPts)
+	series := ChartSeries{
+		AssetID:     pair.Base.String(),
+		Quote:       pair.Quote.String(),
+		Timeframe:   tfRaw,
+		Granularity: gran,
+		PriceType:   "market_cap",
+		Points:      wire,
+	}
+	if !from.IsZero() && len(wire) > 0 {
+		if grace := chartGranularityGrace(gran); wire[0].T.Sub(from) > grace {
+			startsAt := wire[0].T
+			requested := from
+			series.Truncated = true
+			series.DataStartsAt = &startsAt
+			series.RequestedFrom = &requested
+		}
+	}
+	writeJSON(w, series, Flags{Triangulated: triangulated})
+}
+
+// marketCapPoints forward-fills daily supply onto the daily USD-price
+// series and multiplies: each price day gets the most-recent
+// circulating supply at-or-before that day. Both inputs are ascending
+// by bucket; a single forward cursor over supPts keeps it O(n+m). A
+// price day with no supply at-or-before it (asset priced before its
+// first supply snapshot) is skipped rather than emitted as zero.
+func marketCapPoints(pricePts []HistoryPoint, supPts []timescale.SupplyDayPoint) []HistoryPointWire {
+	wire := make([]HistoryPointWire, 0, len(pricePts))
+	si := 0
+	var cur *big.Int
+	for _, pp := range pricePts {
+		for si < len(supPts) && !supPts[si].Bucket.After(pp.Bucket) {
+			cur = supPts[si].Circulating
+			si++
+		}
+		if cur == nil || pp.VWAP == "" {
+			continue
+		}
+		mc, err := usdMarketValue(cur, pp.VWAP, marketCapDecimals)
+		if err != nil {
+			continue
+		}
+		wire = append(wire, HistoryPointWire{T: pp.Bucket, P: mc})
+	}
+	return wire
 }
 
 // parseSupply converts the catalogue's (supply, decimals) tuple into

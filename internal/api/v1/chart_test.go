@@ -3,12 +3,14 @@ package v1_test
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"testing"
 	"time"
 
 	v1 "github.com/StellarIndex/stellar-index/internal/api/v1"
 	"github.com/StellarIndex/stellar-index/internal/canonical"
+	"github.com/StellarIndex/stellar-index/internal/storage/timescale"
 )
 
 // stubFXHistoryReader implements v1.FXHistoryReader for chart-fiat tests.
@@ -515,16 +517,51 @@ func TestChart_MarketCap_FiatCNY_ComputesFromM2(t *testing.T) {
 	}
 }
 
-func TestChart_MarketCap_NonFiat_NotImplemented(t *testing.T) {
-	// Crypto market_cap over time is deferred — return 501.
+func TestChart_MarketCap_Crypto_Computed(t *testing.T) {
+	// On-chain base: market_cap = daily USD price × daily circulating
+	// supply (supply_1d CAGG). 10^10 stroops /1e7 = 1000 XLM.
+	d := func(day int) time.Time { return time.Date(2026, 6, day, 0, 0, 0, 0, time.UTC) }
+	hist := &stubHistoryReader{points: []v1.HistoryPoint{
+		{Bucket: d(1), VWAP: "0.10"},
+		{Bucket: d(2), VWAP: "0.20"},
+	}}
+	sup := &stubSupplyLooker{daily: []timescale.SupplyDayPoint{
+		{Bucket: d(1), Circulating: big.NewInt(1_000_0000000)}, // 1000 XLM
+	}}
+	srv := v1.New(v1.Options{History: hist, Supply: sup, VerifiedCurrencies: newTestCatalogue(t)})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=native&quote=fiat:USD&price_type=market_cap&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Data.PriceType != "market_cap" {
+		t.Errorf("price_type: got %q want market_cap", env.Data.PriceType)
+	}
+	if got := len(env.Data.Points); got != 2 {
+		t.Fatalf("got %d points, want 2: %+v", got, env.Data.Points)
+	}
+	if env.Data.Points[0].P != "100.00" || env.Data.Points[1].P != "200.00" {
+		t.Errorf("market_cap points = %q, %q; want 100.00, 200.00 (0.10×1000, 0.20×1000 forward-filled)",
+			env.Data.Points[0].P, env.Data.Points[1].P)
+	}
+}
+
+func TestChart_MarketCap_Crypto_NoSupplyReader_Unavailable(t *testing.T) {
+	// On-chain market_cap needs the supply reader wired; without it, 503.
 	srv := v1.New(v1.Options{
 		History:            &stubHistoryReader{},
 		VerifiedCurrencies: newTestCatalogue(t),
 	})
 	ts := httpTestServer(t, srv)
 	resp := mustGet(t, ts.URL+"/v1/chart?asset=native&quote=fiat:USD&price_type=market_cap&timeframe=1y&granularity=1d")
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Errorf("status=%d want 501", resp.StatusCode)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status=%d want 503", resp.StatusCode)
 	}
 }
 

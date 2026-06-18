@@ -161,6 +161,64 @@ func (s *Store) SupplyHistory(ctx context.Context, assetKey string, from, to tim
 	return out, nil
 }
 
+// SupplyDayPoint is one day's last-known circulating supply from the
+// supply_1d continuous aggregate (migration 0066). Used as the supply
+// leg of crypto market-cap-over-time.
+type SupplyDayPoint struct {
+	Bucket      time.Time
+	Circulating *big.Int
+}
+
+// DailyCirculatingSupply returns daily last-known circulating supply
+// for assetKey from the supply_1d CAGG, ascending by day, within
+// [from, to] — plus the single most-recent point STRICTLY before
+// `from` (the carry-in row) so the caller can forward-fill the
+// leading edge of a windowed market-cap series. Empty slice + nil
+// error when the asset has no supply snapshots at all.
+//
+// A zero `from` means "from inception"; the carry-in clause then
+// matches nothing (no bucket precedes the epoch) and the window
+// clause returns the full series, which is the intended behaviour.
+func (s *Store) DailyCirculatingSupply(ctx context.Context, assetKey string, from, to time.Time) ([]SupplyDayPoint, error) {
+	const q = `
+		(SELECT bucket, circulating_supply::text
+		   FROM supply_1d
+		  WHERE asset_key = $1 AND bucket < $2
+		  ORDER BY bucket DESC
+		  LIMIT 1)
+		UNION ALL
+		(SELECT bucket, circulating_supply::text
+		   FROM supply_1d
+		  WHERE asset_key = $1 AND bucket >= $2 AND bucket <= $3
+		  ORDER BY bucket ASC)
+		ORDER BY bucket ASC`
+	rows, err := s.db.QueryContext(ctx, q, assetKey, from.UTC(), to.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("timescale: DailyCirculatingSupply %s: %w", assetKey, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]SupplyDayPoint, 0, 256)
+	for rows.Next() {
+		var (
+			bucket  time.Time
+			circStr string
+		)
+		if err := rows.Scan(&bucket, &circStr); err != nil {
+			return nil, fmt.Errorf("timescale: DailyCirculatingSupply %s scan: %w", assetKey, err)
+		}
+		circ, ok := new(big.Int).SetString(circStr, 10)
+		if !ok {
+			return nil, fmt.Errorf("timescale: DailyCirculatingSupply %s parse %q", assetKey, circStr)
+		}
+		out = append(out, SupplyDayPoint{Bucket: bucket.UTC(), Circulating: circ})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: DailyCirculatingSupply %s rows: %w", assetKey, err)
+	}
+	return out, nil
+}
+
 // assembleSupply parses the text-cast NUMERIC columns into *big.Int
 // and assembles a supply.Supply. Centralised so InsertSupply's
 // round-trip and SupplyHistory share identical decode logic — a bug

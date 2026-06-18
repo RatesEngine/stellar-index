@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/StellarIndex/stellar-index/internal/canonical"
+	"github.com/StellarIndex/stellar-index/internal/storage/timescale"
 	"github.com/StellarIndex/stellar-index/internal/supply"
 )
 
@@ -25,6 +27,11 @@ import (
 // best-effort overlay).
 type SupplyLooker interface {
 	LatestSupply(ctx context.Context, assetKey string) (supply.Supply, error)
+	// DailyCirculatingSupply returns daily last-known circulating
+	// supply for the asset_key from the supply_1d CAGG within [from,
+	// to], plus the carry-in point before `from` for forward-filling.
+	// Backs crypto market-cap-over-time (/v1/chart?price_type=market_cap).
+	DailyCirculatingSupply(ctx context.Context, assetKey string, from, to time.Time) ([]timescale.SupplyDayPoint, error)
 }
 
 // ErrSupplyNotFound is what [SupplyLooker.LatestSupply] returns when

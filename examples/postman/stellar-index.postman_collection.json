@@ -5282,7 +5282,7 @@
                 {
                   "disabled": false,
                   "description": {
-                    "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries for fiat:* base assets (M2 from the verified-\ncurrency catalogue × daily FX rate from fx_quotes). Crypto\nmarket_cap is deferred until the market_cap_1d CAGG ships\n(501 today).\n (This can only be one of vwap,twap,market_cap)",
+                    "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries. For fiat:* base assets it is M2 (verified-currency\ncatalogue) × daily FX rate (fx_quotes). For on-chain\n(native / classic / Soroban) base assets it is the daily USD\nprice × daily circulating supply (the `supply_1d` continuous\naggregate, forward-filled). Off-chain `crypto:*` reference\nassets (BTC/ETH/…) have no on-chain supply we publish, so\nthey return an empty series.\n (This can only be one of vwap,twap,market_cap)",
                     "type": "text/plain"
                   },
                   "key": "price_type",
@@ -5352,7 +5352,7 @@
                     {
                       "disabled": false,
                       "description": {
-                        "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries for fiat:* base assets (M2 from the verified-\ncurrency catalogue × daily FX rate from fx_quotes). Crypto\nmarket_cap is deferred until the market_cap_1d CAGG ships\n(501 today).\n (This can only be one of vwap,twap,market_cap)",
+                        "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries. For fiat:* base assets it is M2 (verified-currency\ncatalogue) × daily FX rate (fx_quotes). For on-chain\n(native / classic / Soroban) base assets it is the daily USD\nprice × daily circulating supply (the `supply_1d` continuous\naggregate, forward-filled). Off-chain `crypto:*` reference\nassets (BTC/ETH/…) have no on-chain supply we publish, so\nthey return an empty series.\n (This can only be one of vwap,twap,market_cap)",
                         "type": "text/plain"
                       },
                       "key": "price_type",
@@ -5432,7 +5432,7 @@
                     {
                       "disabled": false,
                       "description": {
-                        "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries for fiat:* base assets (M2 from the verified-\ncurrency catalogue × daily FX rate from fx_quotes). Crypto\nmarket_cap is deferred until the market_cap_1d CAGG ships\n(501 today).\n (This can only be one of vwap,twap,market_cap)",
+                        "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries. For fiat:* base assets it is M2 (verified-currency\ncatalogue) × daily FX rate (fx_quotes). For on-chain\n(native / classic / Soroban) base assets it is the daily USD\nprice × daily circulating supply (the `supply_1d` continuous\naggregate, forward-filled). Off-chain `crypto:*` reference\nassets (BTC/ETH/…) have no on-chain supply we publish, so\nthey return an empty series.\n (This can only be one of vwap,twap,market_cap)",
                         "type": "text/plain"
                       },
                       "key": "price_type",
@@ -5512,7 +5512,7 @@
                     {
                       "disabled": false,
                       "description": {
-                        "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries for fiat:* base assets (M2 from the verified-\ncurrency catalogue × daily FX rate from fx_quotes). Crypto\nmarket_cap is deferred until the market_cap_1d CAGG ships\n(501 today).\n (This can only be one of vwap,twap,market_cap)",
+                        "content": "Series type. `vwap` (default) returns the price series.\n`twap` is reserved for forward compatibility (currently\n400). `market_cap` returns a USD-denominated market-cap\nseries. For fiat:* base assets it is M2 (verified-currency\ncatalogue) × daily FX rate (fx_quotes). For on-chain\n(native / classic / Soroban) base assets it is the daily USD\nprice × daily circulating supply (the `supply_1d` continuous\naggregate, forward-filled). Off-chain `crypto:*` reference\nassets (BTC/ETH/…) have no on-chain supply we publish, so\nthey return an empty series.\n (This can only be one of vwap,twap,market_cap)",
                         "type": "text/plain"
                       },
                       "key": "price_type",

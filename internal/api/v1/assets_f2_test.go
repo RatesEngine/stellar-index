@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/StellarIndex/stellar-index/internal/canonical"
+	"github.com/StellarIndex/stellar-index/internal/storage/timescale"
 	"github.com/StellarIndex/stellar-index/internal/supply"
 
 	v1 "github.com/StellarIndex/stellar-index/internal/api/v1"
@@ -16,9 +18,10 @@ import (
 
 // stubSupplyLooker implements v1.SupplyLooker for tests.
 type stubSupplyLooker struct {
-	snap supply.Supply
-	err  error
-	hit  bool // when false, simulates ErrSupplyNotFound
+	snap  supply.Supply
+	daily []timescale.SupplyDayPoint
+	err   error
+	hit   bool // when false, simulates ErrSupplyNotFound
 }
 
 func (s *stubSupplyLooker) LatestSupply(_ context.Context, _ string) (supply.Supply, error) {
@@ -29,6 +32,10 @@ func (s *stubSupplyLooker) LatestSupply(_ context.Context, _ string) (supply.Sup
 		return supply.Supply{}, v1.ErrSupplyNotFound
 	}
 	return s.snap, nil
+}
+
+func (s *stubSupplyLooker) DailyCirculatingSupply(_ context.Context, _ string, _, _ time.Time) ([]timescale.SupplyDayPoint, error) {
+	return s.daily, s.err
 }
 
 // stubVolumeReader implements v1.VolumeReader for tests. Records the

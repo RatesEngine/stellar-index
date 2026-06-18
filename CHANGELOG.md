@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Crypto market-cap-over-time.** `/v1/chart?price_type=market_cap` now
+  serves on-chain (native / classic / Soroban) base assets instead of
+  returning 501: each day's market cap = the existing daily USD price series
+  (with the stablecoin-USD proxy fallback) × that day's circulating supply
+  from a new **`supply_1d` continuous aggregate** (migration 0066, last-known
+  supply per asset/day, forward-filled). Off-chain `crypto:*` reference
+  assets (no on-chain supply) return an empty series rather than a fabricated
+  cap. Supply is scaled at 7 decimals (matches the spot `market_cap_usd`).
+
 ## [v0.5.0-rc.117] — 2026-06-18
 
 ### Added
