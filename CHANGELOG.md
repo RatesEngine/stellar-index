@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.116] — 2026-06-18
+
+### Changed
+
+- **Account-state + asset-holder reads use a current-state projection.** New
+  `stellar.ledger_entries_current` (ReplacingMergeTree fed by a materialized
+  view on `ledger_entry_changes`) holds the latest entry per key; the readers
+  query it `FINAL` via account_id/asset skip-indexes (~1 row per live entry)
+  instead of a `GROUP BY` over all history. Keeps holders/account-state fast as
+  the backfill scales the lake — unblocks the full genesis re-derive.
+
 ## [v0.5.0-rc.115] — 2026-06-18
 
 ### Added
