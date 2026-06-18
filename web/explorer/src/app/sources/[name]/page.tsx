@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 import { SourceStatsPanel } from '@/app/dexes/[source]/SourceStatsPanel';
 import { formatCompact } from '@/lib/format';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.stellarindex.io';
@@ -190,7 +190,7 @@ export default async function SourceDetailPage({
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <header className="space-y-3">
         <Link

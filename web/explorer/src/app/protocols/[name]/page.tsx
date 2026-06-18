@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 import { ProtocolView } from './ProtocolView';
 import { PROTOCOLS, protocolMeta } from '../registry';
 
@@ -83,7 +83,7 @@ export default async function ProtocolDetailPage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <Suspense
         fallback={

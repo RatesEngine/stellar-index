@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ConsoleShell } from '@/components/nav/ConsoleShell';
 import { QueryProvider } from '@/components/QueryProvider';
+import { serializeJsonLd } from '@/lib/seo';
 
 // Inter (UI) + JetBrains Mono (numeric / addresses / code). next/font
 // self-hosts both at build time — no runtime Google dependency, no layout
@@ -128,7 +129,7 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: serializeJsonLd({
               '@context': 'https://schema.org',
               '@graph': [
                 {

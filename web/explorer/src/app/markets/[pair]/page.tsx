@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { formatCompact } from '@/lib/format';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 import { PairChart } from './PairChart';
 
 const API_BASE_URL =
@@ -342,7 +342,7 @@ export default async function PairPage({ params }: { params: Params }) {
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <header className="space-y-3">
         <Link

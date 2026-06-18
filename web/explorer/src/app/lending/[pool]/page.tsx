@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ExternalLink, ArrowLeft } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.stellarindex.io';
@@ -174,7 +174,7 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <Link
         href="/lending"

@@ -5,7 +5,7 @@ import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact } from '@/lib/format';
 import { isSafeHomeDomain } from '@/lib/safe-domain';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 
 /**
  * /issuers/[g_strkey] — single-issuer detail page.
@@ -202,7 +202,7 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       {detail.scam_reason && (
         <div className="rounded-lg border-2 border-down/40 bg-down-subtle px-4 py-3">

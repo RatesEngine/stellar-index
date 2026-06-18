@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
 
-import { SITE_OG_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, serializeJsonLd } from '@/lib/seo';
 import { assetHrefFor } from '@/lib/fiat-slugs';
 import { ConvertPair } from './ConvertPair';
 
@@ -226,7 +226,7 @@ export default async function ConvertPage({ params }: { params: Params }) {
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <Link
         href={assetHrefFor(f)}

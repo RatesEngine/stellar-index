@@ -5,7 +5,7 @@ import { Suspense } from 'react';
 import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 import {
   Badge,
   Breadcrumbs,
@@ -612,11 +612,11 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     <Container className="space-y-8 py-8 sm:py-10">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqLD) }}
       />
       <header className="space-y-3">
         <Breadcrumbs
