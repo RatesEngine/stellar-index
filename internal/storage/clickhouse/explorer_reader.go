@@ -451,6 +451,13 @@ func (r *ExplorerReader) ContractInteractions(ctx context.Context, contractID st
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	// Cap the subject's transaction set to its most-recent 50k (ledger,
+	// tx) rows. Without this, a mega-contract (a SAC / AMM router with
+	// tens of millions of events in the window) builds an enormous IN set
+	// and the probe times out. 50k recent txs is a rich, bounded sample —
+	// the interaction map reflects current behaviour regardless of how
+	// busy the contract is.
+	const subjectTxCap = 50_000
 	const q = `SELECT contract_id, toInt64(count()) AS shared
 		FROM stellar.contract_events
 		WHERE ledger_seq >= ?
@@ -458,11 +465,13 @@ func (r *ExplorerReader) ContractInteractions(ctx context.Context, contractID st
 		  AND (ledger_seq, tx_hash) IN (
 		      SELECT ledger_seq, tx_hash FROM stellar.contract_events
 		      WHERE contract_id = ? AND ledger_seq >= ?
+		      ORDER BY ledger_seq DESC
+		      LIMIT ?
 		  )
 		GROUP BY contract_id
 		ORDER BY shared DESC
 		LIMIT ?`
-	rows, err := r.conn.Query(ctx, q, sinceLedger, contractID, contractID, sinceLedger, limit)
+	rows, err := r.conn.Query(ctx, q, sinceLedger, contractID, contractID, sinceLedger, subjectTxCap, limit)
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse: contract %s interactions: %w", contractID, err)
 	}
