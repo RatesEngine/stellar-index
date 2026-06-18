@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.122] — 2026-06-19
+
 ### Fixed
 
 - **Blend reserves lookup no longer full-scans the lake.** rc.121's
