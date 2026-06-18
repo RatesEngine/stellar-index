@@ -97,7 +97,7 @@
       # still override with -e migrate_dsn=… .
       ansible.builtin.shell:
         cmd: |
-          set -euo pipefail
+          set -eu
           {% if migrate_dsn is defined and migrate_dsn | length > 0 %}
           export STELLARINDEX_POSTGRES_DSN={{ migrate_dsn | quote }}
           {% else %}
