@@ -15,6 +15,14 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.114] — 2026-06-18
+
+### Fixed
+
+- **`/v1/assets/{id}/holders` 500'd** — the holder-count subquery scanned
+  ClickHouse `count()` (UInt64) into `int64` (same driver type-mismatch as the
+  rc.112 directory fix, missed in the holders count path). Cast `toInt64(count())`.
+
 ## [v0.5.0-rc.113] — 2026-06-18
 
 ### Added

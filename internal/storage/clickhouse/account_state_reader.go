@@ -235,7 +235,7 @@ func (r *ExplorerReader) AssetHolders(ctx context.Context, asset string, limit i
 		return nil, 0, err
 	}
 
-	const countQ = `SELECT count() FROM (
+	const countQ = `SELECT toInt64(count()) FROM (
 		SELECT account_id,
 			argMax(balance, (ledger_seq, change_index)) AS bal,
 			argMax(change_type, (ledger_seq, change_index)) AS ct
