@@ -283,7 +283,7 @@ function AccountMenu({ email }: { email?: string }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-controls="sidebar-account-menu"
         className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface px-2.5 py-2 text-left shadow-xs hover:bg-surface-subtle"
       >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">
@@ -295,13 +295,18 @@ function AccountMenu({ email }: { email?: string }) {
         </span>
       </button>
       {open && (
+        // Disclosure, not an APG menu: we don't implement the menu
+        // keyboard model (Arrow/Home/End), so declaring role="menu"/
+        // "menuitem" would promise a behaviour we don't provide and
+        // mislead AT. The trigger's aria-expanded + aria-controls
+        // describe it correctly; items are plain links/buttons (Tab-
+        // reachable), and Escape closes it (handled above).
         <div
-          role="menu"
+          id="sidebar-account-menu"
           className="absolute bottom-full left-0 z-50 mb-1 w-full rounded-lg border border-line bg-surface p-2 shadow-elevated"
         >
           <Link
             href="/account"
-            role="menuitem"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-surface-subtle"
           >
@@ -311,7 +316,6 @@ function AccountMenu({ email }: { email?: string }) {
           <button
             type="button"
             onClick={signOut}
-            role="menuitem"
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-ink-body hover:bg-surface-subtle"
           >
             <LogOut className="h-3.5 w-3.5 text-ink-faint" />
