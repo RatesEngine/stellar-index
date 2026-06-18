@@ -17,6 +17,19 @@ against.
 
 ### Fixed
 
+- **Deploys silently skipped every migration — the F-1220 auto-apply was a
+  no-op.** `deploy.yml` passes `-e "migrations_skip=false"`, which Ansible
+  receives as the STRING `"false"` (truthy in Jinja), so the playbook's
+  `when: ... or not migrations_skip` always evaluated false and SKIPPED the
+  "Sync migrations" + "Apply outstanding migrations" tasks — printing
+  "migrations_skip=true — skipping" even when the operator passed false. Every
+  binary deploy since left schema changes unapplied, the exact "healthz 200 but
+  partial outage" shape F-1220 was meant to prevent (and why the canonical
+  `/usr/local/share/stellarindex/migrations` was empty on r1). Fixed by coercing
+  with `| bool` in the playbook conditions. Also corrected the
+  `fx-history-missing` runbook, which pointed operators at the stale,
+  unmanaged `/var/lib/stellarindex/migrations` instead of the deploy-managed
+  `/usr/local/share/stellarindex/migrations`.
 - **Doc/config drift: the dashboard SPA at `app.stellarindex.io` was retired
   (2026-06-17) into the in-site `stellarindex.io/account`, but config doc-strings,
   handler comments, the OpenAPI `/auth/login` description, `package.json`, and

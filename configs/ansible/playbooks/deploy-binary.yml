@@ -78,7 +78,12 @@
         recursive: true
       when:
         - local_dist_dir is defined
-        - migrations_skip is not defined or not migrations_skip
+        # `| bool` is load-bearing: deploy.yml passes this via
+        # `-e "migrations_skip=false"`, which arrives as the STRING
+        # "false" — truthy in Jinja, so a bare `not migrations_skip`
+        # silently SKIPPED every deploy's migration apply (the F-1220
+        # safety feature was a no-op). `| bool` coerces "false"→False.
+        - not (migrations_skip | default(false) | bool)
 
     - name: Apply outstanding migrations
       ansible.builtin.command:
@@ -93,7 +98,7 @@
       changed_when: "'migrations applied' in migrate_result.stdout"
       failed_when:
         - migrate_result.rc != 0
-      when: migrations_skip is not defined or not migrations_skip
+      when: not (migrations_skip | default(false) | bool)
 
     - name: Migration sync skipped — operator override
       ansible.builtin.debug:
@@ -101,7 +106,7 @@
           migrations_skip=true — skipping migration sync + apply.
           Use this ONLY for hot-fix deploys where you've verified
           the schema is unchanged from the prior tag.
-      when: migrations_skip is defined and migrations_skip
+      when: migrations_skip | default(false) | bool
 
   tasks:
     - name: Per-binary deploy

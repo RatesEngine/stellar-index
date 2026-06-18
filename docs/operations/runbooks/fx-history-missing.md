@@ -56,9 +56,17 @@ The `fx_quotes` hypertable was added in PR #1041 (task #104,
 `migrations/0028_create_fx_quotes.up.sql`. Two operator-side
 steps make it live on a deployment:
 
-1. **Copy the migration file** to the deployment's migrations
-   directory (`/var/lib/stellarindex/migrations/` on r1).
+1. **Copy the migration file** to the deployment's canonical
+   migrations directory (`/usr/local/share/stellarindex/migrations/`
+   on r1 — the dir the deploy playbook syncs + applies from; NOT
+   `/var/lib/stellarindex/migrations/`, which is a stale unmanaged
+   leftover).
 2. **Apply it** via `stellarindex-migrate up`.
+
+> Note: as of the `migrations_skip | bool` fix, `deploy.yml` syncs +
+> applies pending migrations automatically before swapping binaries,
+> so a normal `gh workflow run deploy.yml` deploy already runs this.
+> The manual steps below are the fallback for an out-of-band fix.
 
 Once the table exists, the forex worker (running inside
 `stellarindex-api`) starts persisting on its next refresh tick,
@@ -88,22 +96,22 @@ From your local checkout:
 
 ```sh
 scp migrations/0028_create_fx_quotes.{up,down}.sql \
-    root@<host>:/var/lib/stellarindex/migrations/
+    root@<host>:/usr/local/share/stellarindex/migrations/
 ```
 
-(R1 host: `136.243.90.96`. The `migrations/` directory is the
-authoritative path the `stellarindex-migrate` binary reads —
-confirm with `cat /etc/systemd/system/stellarindex-migrate*.service`
-if you've moved it.)
+(R1 host: `136.243.90.96`. `/usr/local/share/stellarindex/migrations`
+is the canonical path the deploy playbook syncs to with `delete:true`
+and that `stellarindex-migrate` should read. `/var/lib/stellarindex/migrations`
+is a stale unmanaged dir — don't use it.)
 
 ### 2. Apply the migration
 
 ```sh
 ssh root@<host> '
   set -e
-  cd /var/lib/stellarindex
+  set -a; . /etc/default/stellarindex; set +a
   /usr/local/bin/stellarindex-migrate \
-    -migrations migrations \
+    -migrations /usr/local/share/stellarindex/migrations \
     -dsn "$STELLARINDEX_POSTGRES_DSN" \
     up
 '
