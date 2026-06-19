@@ -5,6 +5,16 @@ import Link from 'next/link';
 
 import { useMarkets } from '@/api/hooks';
 import { apiGet } from '@/api/client';
+import {
+  EmptyState,
+  Table,
+  TableWrap,
+  TBody,
+  Td,
+  Th,
+  THead,
+  TR,
+} from '@/components/ui';
 
 interface Trade {
   source: string;
@@ -104,94 +114,82 @@ export function HomeRecentTrades() {
           </p>
         </div>
       </div>
-      <div className="overflow-hidden rounded-md border border-line bg-surface">
-        {error && (
-          <div className="px-4 py-2 text-xs text-down">
-            Live feed unreachable: {error}
-          </div>
-        )}
-        {trades.length === 0 ? (
-          <div className="px-4 py-6 text-center text-sm text-ink-muted">
-            Waiting for first trades…
-          </div>
-        ) : (
-          <div className="max-h-96 overflow-y-auto">
-            <table className="min-w-full divide-y divide-line text-sm">
-              <thead className="sticky top-0 bg-surface-muted">
-                <tr className="text-left text-[10px] uppercase tracking-wider text-ink-muted">
-                  <th className="px-4 py-2 font-medium">Time</th>
-                  <th className="px-4 py-2 font-medium">Pair</th>
-                  <th className="px-4 py-2 font-medium">Source</th>
-                  <th className="px-4 py-2 text-right font-medium">Price</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line-subtle font-mono text-xs">
-                {trades.map((t, i) => {
-                  // Both sides need to be defined to construct a
-                  // valid /markets/<base~quote> route. If either
-                  // is null (rare — see comment in `short()`), we
-                  // render the row but don't link it; sending the
-                  // user to /markets/native~undefined would 404.
-                  const linkable = !!t.base_asset && !!t.quote_asset;
-                  const slug = linkable
-                    ? `${t.base_asset}~${t.quote_asset}`
-                    : '';
-                  const pairLabel = (
-                    <>
-                      {short(t.base_asset)} / {short(t.quote_asset)}
-                    </>
-                  );
-                  return (
-                    <tr
-                      key={`${t.ts}-${t.source}-${i}`}
-                      className="hover:bg-surface-muted"
-                    >
-                      <td className="px-4 py-2 tabular-nums text-ink-muted">
-                        {t.tx_hash ? (
-                          <a
-                            href={`https://stellar.expert/explorer/public/tx/${t.tx_hash}`}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="hover:text-brand-600 hover:underline"
-                            title={`View tx ${t.tx_hash} on stellar.expert`}
-                          >
-                            {timeAgo(t.ts)}
-                          </a>
-                        ) : (
-                          timeAgo(t.ts)
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {linkable ? (
-                          <Link
-                            href={`/markets/${encodeURIComponent(slug)}`}
-                            className="hover:text-brand-600"
-                          >
-                            {pairLabel}
-                          </Link>
-                        ) : (
-                          <span>{pairLabel}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 uppercase tracking-wider text-ink-body">
+      {error && (
+        <div className="rounded-card border border-down-subtle bg-down-subtle/30 px-4 py-2 text-xs text-down">
+          Live feed unreachable: {error}
+        </div>
+      )}
+      {trades.length === 0 ? (
+        <EmptyState title="Waiting for first trades…" />
+      ) : (
+        <TableWrap className="max-h-96 overflow-y-auto">
+          <Table>
+            <THead className="sticky top-0 z-10">
+              <TR className="hover:bg-transparent">
+                <Th>Time</Th>
+                <Th>Pair</Th>
+                <Th>Source</Th>
+                <Th align="right">Price</Th>
+              </TR>
+            </THead>
+            <TBody className="font-mono text-xs">
+              {trades.map((t, i) => {
+                // Both sides need to be defined to construct a
+                // valid /markets/<base~quote> route. If either
+                // is null (rare — see comment in `short()`), we
+                // render the row but don't link it; sending the
+                // user to /markets/native~undefined would 404.
+                const linkable = !!t.base_asset && !!t.quote_asset;
+                const slug = linkable ? `${t.base_asset}~${t.quote_asset}` : '';
+                const pairLabel = (
+                  <>
+                    {short(t.base_asset)} / {short(t.quote_asset)}
+                  </>
+                );
+                return (
+                  <TR key={`${t.ts}-${t.source}-${i}`}>
+                    <Td className="tabular-nums text-ink-muted">
+                      {t.tx_hash ? (
+                        <a
+                          href={`https://stellar.expert/explorer/public/tx/${t.tx_hash}`}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="hover:text-brand-600 hover:underline"
+                          title={`View tx ${t.tx_hash} on stellar.expert`}
+                        >
+                          {timeAgo(t.ts)}
+                        </a>
+                      ) : (
+                        timeAgo(t.ts)
+                      )}
+                    </Td>
+                    <Td>
+                      {linkable ? (
                         <Link
-                          href={`/sources/${t.source}`}
+                          href={`/markets/${encodeURIComponent(slug)}`}
                           className="hover:text-brand-600"
                         >
-                          {t.source}
+                          {pairLabel}
                         </Link>
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {t.price}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                      ) : (
+                        <span>{pairLabel}</span>
+                      )}
+                    </Td>
+                    <Td className="uppercase tracking-wider text-ink-body">
+                      <Link href={`/sources/${t.source}`} className="hover:text-brand-600">
+                        {t.source}
+                      </Link>
+                    </Td>
+                    <Td align="right" className="tabular-nums">
+                      {t.price}
+                    </Td>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </TableWrap>
+      )}
     </section>
   );
 }

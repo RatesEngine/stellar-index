@@ -67,7 +67,7 @@ function MoverColumn({
   verifiedSlugs?: Set<string>;
 }) {
   return (
-    <div className="overflow-hidden rounded-md border border-line bg-surface">
+    <div className="overflow-hidden rounded-card border border-line bg-surface">
       <header className="flex items-baseline justify-between border-b border-line bg-surface-muted px-4 py-2 text-[11px] uppercase tracking-wider text-ink-muted">
         <span className={tone === 'up' ? 'text-up' : 'text-down'}>
           {title}
@@ -81,7 +81,7 @@ function MoverColumn({
           Not enough movement to rank.
         </div>
       ) : (
-        <ul className="divide-y divide-line-subtle">
+        <ul className="divide-y divide-line">
           {coins.map((c) => (
             <li
               key={c.asset_id}

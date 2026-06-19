@@ -3,6 +3,17 @@
 import Link from 'next/link';
 
 import { useCoins, useVerifiedSlugs, type Coin } from '@/api/hooks';
+import {
+  EmptyState,
+  Skeleton,
+  Table,
+  TableWrap,
+  TBody,
+  Td,
+  Th,
+  THead,
+  TR,
+} from '@/components/ui';
 import { formatCompact } from '@/lib/format';
 
 /**
@@ -48,57 +59,51 @@ export function HomeTopAssets() {
           See all →
         </Link>
       </div>
-      <div className="overflow-x-auto rounded-md border border-line bg-surface">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-line bg-surface-muted text-left text-[11px] uppercase tracking-wider text-ink-muted">
-              <th className="px-4 py-2.5 font-medium">#</th>
-              <th className="px-4 py-2.5 font-medium">Asset</th>
-              <th className="px-4 py-2.5 text-right font-medium">Price</th>
-              <th className="px-4 py-2.5 text-right font-medium">24h %</th>
-              <th className="px-4 py-2.5 text-right font-medium">
-                24h volume
-              </th>
-              <th className="px-4 py-2.5 text-right font-medium">
-                24h chart
-              </th>
-              <th className="px-4 py-2.5 text-right font-medium">
-                Observations
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line-subtle">
-            {isError && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="py-8 text-center text-sm text-down-strong"
-                >
-                  Failed to load top assets.
-                </td>
-              </tr>
-            )}
-            {isLoading && !data && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="py-8 text-center text-sm text-ink-muted"
-                >
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {data?.coins.map((coin, idx) => (
-              <Row
-                key={coin.asset_id}
-                coin={coin}
-                rank={idx + 1}
-                verified={verifiedSlugs?.has(coin.slug.toLowerCase()) ?? false}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {isError ? (
+        <EmptyState
+          title="Couldn't load top assets."
+          description="The assets feed is unavailable right now."
+          action={
+            <Link href="/assets" className="text-brand-600 hover:underline">
+              Browse all assets →
+            </Link>
+          }
+        />
+      ) : (
+        <TableWrap>
+          <Table>
+            <THead>
+              <TR className="hover:bg-transparent">
+                <Th>#</Th>
+                <Th>Asset</Th>
+                <Th align="right">Price</Th>
+                <Th align="right">24h %</Th>
+                <Th align="right">24h volume</Th>
+                <Th align="right">24h chart</Th>
+                <Th align="right">Observations</Th>
+              </TR>
+            </THead>
+            <TBody>
+              {isLoading && !data &&
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TR key={`sk-${i}`} className="hover:bg-transparent">
+                    <Td colSpan={7}>
+                      <Skeleton className="h-5 w-full" />
+                    </Td>
+                  </TR>
+                ))}
+              {data?.coins.map((coin, idx) => (
+                <Row
+                  key={coin.asset_id}
+                  coin={coin}
+                  rank={idx + 1}
+                  verified={verifiedSlugs?.has(coin.slug.toLowerCase()) ?? false}
+                />
+              ))}
+            </TBody>
+          </Table>
+        </TableWrap>
+      )}
     </section>
   );
 }
@@ -115,9 +120,9 @@ function Row({
   const price = parseDec(coin.price_usd);
   const volume = parseDec(coin.volume_24h_usd);
   return (
-    <tr className="hover:bg-surface-muted">
-      <td className="px-4 py-3 text-ink-faint">{rank}</td>
-      <td className="px-4 py-3">
+    <TR>
+      <Td className="text-ink-faint">{rank}</Td>
+      <Td>
         <Link
           href={`/assets/${coin.slug}`}
           className="group flex items-center gap-2"
@@ -151,37 +156,33 @@ function Row({
           )}
           <span className="text-[11px] text-ink-muted">{coin.slug}</span>
         </Link>
-      </td>
-      <td className="px-4 py-3 text-right">
+      </Td>
+      <Td align="right">
         {price != null ? (
-          <span className="font-mono tabular-nums text-ink">
-            ${formatPrice(price)}
-          </span>
+          <span className="font-mono text-ink">${formatPrice(price)}</span>
         ) : (
           <Dash />
         )}
-      </td>
-      <td className="px-4 py-3 text-right">
+      </Td>
+      <Td align="right">
         <ChangePct raw={coin.change_24h_pct} />
-      </td>
-      <td className="px-4 py-3 text-right">
+      </Td>
+      <Td align="right">
         {volume != null ? (
-          <span className="font-mono tabular-nums text-ink-body">
-            ${formatCompact(volume)}
-          </span>
+          <span className="font-mono text-ink-body">${formatCompact(volume)}</span>
         ) : (
           <Dash />
         )}
-      </td>
-      <td className="px-4 py-3 text-right">
+      </Td>
+      <Td align="right">
         <RowSparkline points={coin.price_history_24h} />
-      </td>
-      <td className="px-4 py-3 text-right">
-        <span className="font-mono tabular-nums text-ink-body">
+      </Td>
+      <Td align="right">
+        <span className="font-mono text-ink-body">
           {formatCompact(coin.observation_count)}
         </span>
-      </td>
-    </tr>
+      </Td>
+    </TR>
   );
 }
 
