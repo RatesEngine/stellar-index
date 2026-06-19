@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.125] — 2026-06-19
+
 ### Added
 
 - **Blend lending: USD TVL + real APY now populate** (ADR-0039 follow-ups).
