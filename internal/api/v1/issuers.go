@@ -245,30 +245,7 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		SEP1Payload:    row.SEP1Payload,
 		CreationLedger: row.CreationLedger,
 	}
-	// The dedicated issuer resolver isn't populating row.Auth* / row.HomeDomain
-	// in prod (audit 2026-06-19), but we already index the on-chain AccountEntry
-	// via the explorer's AccountState. Decode the auth-flags bitmask + the
-	// home_domain here so the issuer panel shows real values instead of "not
-	// yet resolved" (works for dormant issuers too once the account-state
-	// backfill lands — data-truth G2). Stellar AccountEntry flags:
-	// AUTH_REQUIRED=1, AUTH_REVOCABLE=2, AUTH_IMMUTABLE=4, AUTH_CLAWBACK=8.
-	if (out.AuthRequired == nil || out.HomeDomain == "") && s.explorer != nil {
-		if st, aerr := s.explorer.AccountState(iCtx, gStrkey); aerr == nil && st.Exists {
-			if out.AuthRequired == nil {
-				req := st.Flags&0x1 != 0
-				rev := st.Flags&0x2 != 0
-				imm := st.Flags&0x4 != 0
-				claw := st.Flags&0x8 != 0
-				out.AuthRequired = &req
-				out.AuthRevocable = &rev
-				out.AuthImmutable = &imm
-				out.AuthClawback = &claw
-			}
-			if out.HomeDomain == "" && st.HomeDomain != "" {
-				out.HomeDomain = st.HomeDomain
-			}
-		}
-	}
+	s.enrichIssuerFromAccountState(iCtx, gStrkey, &out)
 	for _, a := range assets {
 		out.Assets = append(out.Assets, IssuedAsset{
 			AssetID:          a.AssetID,
@@ -280,4 +257,37 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, out, Flags{})
+}
+
+// enrichIssuerFromAccountState fills auth-flags + home_domain from the on-chain
+// AccountEntry (via the explorer's CH AccountState) when the dedicated issuer
+// resolver hasn't populated them — so the issuer panel shows real values
+// instead of "not yet resolved", for dormant issuers too once the account
+// backfill lands (data-truth G2). Stellar AccountEntry flags: AUTH_REQUIRED=1,
+// AUTH_REVOCABLE=2, AUTH_IMMUTABLE=4, AUTH_CLAWBACK=8. No-op when nothing is
+// missing or the explorer reader isn't wired.
+func (s *Server) enrichIssuerFromAccountState(ctx context.Context, gStrkey string, out *Issuer) {
+	if out.AuthRequired != nil && out.HomeDomain != "" {
+		return
+	}
+	if s.explorer == nil {
+		return
+	}
+	st, err := s.explorer.AccountState(ctx, gStrkey)
+	if err != nil || !st.Exists {
+		return
+	}
+	if out.AuthRequired == nil {
+		req := st.Flags&0x1 != 0
+		rev := st.Flags&0x2 != 0
+		imm := st.Flags&0x4 != 0
+		claw := st.Flags&0x8 != 0
+		out.AuthRequired = &req
+		out.AuthRevocable = &rev
+		out.AuthImmutable = &imm
+		out.AuthClawback = &claw
+	}
+	if out.HomeDomain == "" && st.HomeDomain != "" {
+		out.HomeDomain = st.HomeDomain
+	}
 }
