@@ -29,6 +29,40 @@ type VolumeBucket struct {
 	TradeCount int64     `json:"trade_count"`
 }
 
+// buildSourceVolumeHistory projects the per-(source, hour) raw buckets
+// into a per-source trailing-24h series, zero-filling missing hours so
+// clients render a continuous chart rather than gappy bars. Carries
+// both USD volume + trade count per hour.
+func buildSourceVolumeHistory(buckets []timescale.SourceVolumeBucket) map[string][]VolumeBucket {
+	type hourRaw struct {
+		vol   string
+		count int64
+	}
+	rawBySource := map[string]map[time.Time]hourRaw{}
+	for _, b := range buckets {
+		if rawBySource[b.Source] == nil {
+			rawBySource[b.Source] = map[time.Time]hourRaw{}
+		}
+		rawBySource[b.Source][b.Hour.UTC()] = hourRaw{vol: b.VolumeUSD, count: b.TradeCount}
+	}
+	out := map[string][]VolumeBucket{}
+	now := time.Now().UTC().Truncate(time.Hour)
+	for src, raw := range rawBySource {
+		series := make([]VolumeBucket, 0, 24)
+		for i := 23; i >= 0; i-- {
+			hour := now.Add(time.Duration(-i) * time.Hour)
+			hr := raw[hour]
+			vol := hr.vol
+			if vol == "" {
+				vol = "0"
+			}
+			series = append(series, VolumeBucket{Hour: hour, VolumeUSD: vol, TradeCount: hr.count})
+		}
+		out[src] = series
+	}
+	return out
+}
+
 // Source is the wire shape for /v1/sources entries.
 //
 // Mirrors external.Metadata 1:1 today. Field-by-field on the wire
@@ -175,34 +209,7 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 		if err != nil {
 			s.logger.Warn("source volume history", "err", err)
 		} else {
-			// Build per-source raw maps first so we can fill missing
-			// hours with zero buckets (clients render a continuous
-			// sparkline rather than gappy bars).
-			type hourRaw struct {
-				vol   string
-				count int64
-			}
-			rawBySource := map[string]map[time.Time]hourRaw{}
-			for _, b := range buckets {
-				if rawBySource[b.Source] == nil {
-					rawBySource[b.Source] = map[time.Time]hourRaw{}
-				}
-				rawBySource[b.Source][b.Hour.UTC()] = hourRaw{vol: b.VolumeUSD, count: b.TradeCount}
-			}
-			now := time.Now().UTC().Truncate(time.Hour)
-			for src, raw := range rawBySource {
-				series := make([]VolumeBucket, 0, 24)
-				for i := 23; i >= 0; i-- {
-					hour := now.Add(time.Duration(-i) * time.Hour)
-					hr := raw[hour]
-					vol := hr.vol
-					if vol == "" {
-						vol = "0"
-					}
-					series = append(series, VolumeBucket{Hour: hour, VolumeUSD: vol, TradeCount: hr.count})
-				}
-				historyBySource[src] = series
-			}
+			historyBySource = buildSourceVolumeHistory(buckets)
 		}
 	}
 
