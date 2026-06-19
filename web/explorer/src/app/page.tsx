@@ -4,6 +4,7 @@ import { ArrowRight, Activity } from 'lucide-react';
 import { ButtonLink, Container } from '@/components/ui';
 import { HomeBlogStrip } from './HomeBlogStrip';
 import { HomeCurrencies } from './HomeCurrencies';
+import { HomeHeroChart } from './HomeHeroChart';
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
 import { HomeNetworkStrip } from './HomeNetworkStrip';
 import { HomeRecentChanges } from './HomeRecentChanges';
@@ -49,6 +50,8 @@ export default function HomePage() {
       </header>
 
       <HomeNetworkStrip />
+
+      <HomeHeroChart />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <NetworkLivePanel />
