@@ -242,13 +242,13 @@ function OperationsPanel({
       bodyClassName="space-y-3"
     >
       {operations.map((op, i) => (
-        <OperationCard key={`${op.op_index}-${i}`} op={op} />
+        <OperationCard key={`${op.op_index}-${i}`} hash={hash} op={op} />
       ))}
     </Panel>
   );
 }
 
-function OperationCard({ op }: { op: TxOperation }) {
+function OperationCard({ hash, op }: { hash: string; op: TxOperation }) {
   const fields = op.fields ?? {};
   const fieldKeys = Object.keys(fields);
   return (
@@ -257,9 +257,13 @@ function OperationCard({ op }: { op: TxOperation }) {
         <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
           #{op.op_index}
         </span>
-        <span className="text-brand-700 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-medium">
+        <Link
+          href={`/operation?tx=${hash}&i=${op.op_index}`}
+          className="text-brand-700 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-medium hover:bg-brand-100"
+          title="Operation detail"
+        >
           {op.type}
-        </span>
+        </Link>
         {op.result_code != null && (
           <span
             // result_code is a numeric XDR code: 0 = opSUCCESS. Gate on

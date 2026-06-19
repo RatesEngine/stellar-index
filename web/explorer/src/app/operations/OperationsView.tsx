@@ -131,9 +131,13 @@ export function OperationsView() {
                 {ops.map((op) => (
                   <tr key={`${op.tx_hash}:${op.op_index}`} className="hover:bg-surface-muted">
                     <td className="px-4 py-3">
-                      <code className="rounded bg-surface-muted px-1.5 py-0.5 text-[11px] text-ink-body">
-                        {op.type}
-                      </code>
+                      <Link
+                        href={`/operation?tx=${op.tx_hash}&i=${op.op_index}`}
+                        className="rounded bg-surface-muted px-1.5 py-0.5 text-[11px] text-ink-body hover:text-brand-600"
+                        title="Operation detail"
+                      >
+                        <code>{op.type}</code>
+                      </Link>
                     </td>
                     <td className="px-4 py-3 font-mono text-[11px] text-ink-muted">
                       {summarize(op) || <span className="text-ink-faint">—</span>}
