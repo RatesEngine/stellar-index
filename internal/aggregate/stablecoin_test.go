@@ -6,6 +6,24 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/canonical"
 )
 
+// TestStablecoinCodes_InSyncWithCanonical pins canonical.StablecoinCodes
+// (used by the storage layer's pair-orientation SQL) to the KEYS of
+// this package's stablecoinFiatProxy (the pricing-policy source of
+// truth). They live in two packages to avoid a storage→aggregate import
+// cycle; this guards against drift.
+func TestStablecoinCodes_InSyncWithCanonical(t *testing.T) {
+	for code := range stablecoinFiatProxy {
+		if !canonical.StablecoinCodes[code] {
+			t.Errorf("stablecoinFiatProxy has %q but canonical.StablecoinCodes does not — add it there", code)
+		}
+	}
+	for code := range canonical.StablecoinCodes {
+		if _, ok := stablecoinFiatProxy[code]; !ok {
+			t.Errorf("canonical.StablecoinCodes has %q but stablecoinFiatProxy does not — remove it or add the peg", code)
+		}
+	}
+}
+
 func TestFiatProxy_USDPegged(t *testing.T) {
 	for _, code := range []string{"USDT", "USDC", "DAI", "PYUSD", "USDP"} {
 		t.Run(code, func(t *testing.T) {

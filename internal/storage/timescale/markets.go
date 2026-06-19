@@ -368,10 +368,35 @@ func buildPoolsQuery(since time.Time, filter PoolsFilter, cursor string, limit i
          GROUP BY p.source, p.base_asset, p.quote_asset
         )
     `
+	// canon collapses flipped orientations of the same market within a
+	// source (XLM/USDC + USDC/XLM → one canonical row): vol + trade
+	// count sum across both directions; last_price is the latest trade's
+	// price re-expressed canonically (inverted for the flipped one). The
+	// XLM-fallback is already resolved into vol_24h_usd in `pools`, so
+	// summing it across directions is correct. See canonical.Orient.
+	canonBase, canonQuote, flipped := canonOrientSQL("base_asset", "quote_asset")
+	cte += `,
+        canon AS (
+          SELECT source,
+                 ` + canonBase + ` AS base_asset,
+                 ` + canonQuote + ` AS quote_asset,
+                 MAX(last_trade_at)             AS last_trade_at,
+                 SUM(count_24h)                 AS count_24h,
+                 SUM(vol_24h_usd::numeric)::text AS vol_24h_usd,
+                 (array_agg(
+                    CASE WHEN ` + flipped + ` AND last_price IS NOT NULL
+                         THEN (1.0 / NULLIF(last_price::numeric, 0))::text
+                         ELSE last_price END
+                    ORDER BY last_trade_at DESC NULLS LAST)
+                  FILTER (WHERE last_price IS NOT NULL))[1] AS last_price
+            FROM pools
+           GROUP BY source, ` + canonBase + `, ` + canonQuote + `
+        )
+    `
 	if order == MarketsOrderVolume24hDesc {
 		const tail = `
 		 SELECT source, base_asset, quote_asset, last_trade_at, count_24h, vol_24h_usd, last_price
-		   FROM pools
+		   FROM canon
 		  WHERE $2 = ''
 		     OR COALESCE(vol_24h_usd::numeric, 0)
 		          <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
@@ -656,7 +681,14 @@ func buildDistinctPairsQuery(since time.Time, source, asset, cursor string, limi
 	// filter BOTH CTEs (empty short-circuits → planner skips); the
 	// keyset-cursor ($2) + LIMIT $3 overfetch-by-one shape is
 	// byte-for-byte the prior pagination contract.
-	const ctes = `
+	// canon collapses flipped orientations of the same market (XLM/USDC
+	// and USDC/XLM — the SDEX decoder records both) into ONE row: USD
+	// volume + trade count sum across both directions, and last_price is
+	// the most-recent trade's price re-expressed in the canonical
+	// orientation (inverted for the flipped direction). See
+	// canonOrientSQL / canonical.Orient.
+	canonBase, canonQuote, flipped := canonOrientSQL("base_asset", "quote_asset")
+	ctes := `
         WITH d AS (
             SELECT p.base_asset, p.quote_asset,
                    MAX(p.bucket) AS bucket_close_at,
@@ -678,17 +710,38 @@ func buildDistinctPairsQuery(since time.Time, source, asset, cursor string, limi
                AND ($4 = '' OR $4 = ANY(p.sources))
                AND ($5 = '' OR p.base_asset = $5 OR p.quote_asset = $5)
              GROUP BY p.base_asset, p.quote_asset
+        ),
+        raw AS (
+            SELECT d.base_asset, d.quote_asset,
+                   COALESCE(h.last_bucket_1m, d.bucket_close_at) AS last_trade_at,
+                   d.bucket_close_at,
+                   COALESCE(h.count_24h, 0)  AS count_24h,
+                   COALESCE(h.vol_24h_num, 0) AS vol_24h_num,
+                   d.last_price
+              FROM d
+              LEFT JOIN h
+                ON h.base_asset = d.base_asset
+               AND h.quote_asset = d.quote_asset
+        ),
+        canon AS (
+            SELECT ` + canonBase + ` AS base_asset,
+                   ` + canonQuote + ` AS quote_asset,
+                   MAX(last_trade_at)   AS last_trade_at,
+                   MAX(bucket_close_at) AS bucket_close_at,
+                   SUM(count_24h)       AS count_24h,
+                   SUM(vol_24h_num)     AS vol_24h_num,
+                   (array_agg(
+                      CASE WHEN ` + flipped + ` AND last_price IS NOT NULL
+                           THEN (1.0 / NULLIF(last_price::numeric, 0))::text
+                           ELSE last_price END
+                      ORDER BY last_trade_at DESC NULLS LAST)
+                    FILTER (WHERE last_price IS NOT NULL))[1] AS last_price
+              FROM raw
+             GROUP BY ` + canonBase + `, ` + canonQuote + `
         )
-        SELECT d.base_asset, d.quote_asset,
-               COALESCE(h.last_bucket_1m, d.bucket_close_at) AS last_trade_at,
-               d.bucket_close_at,
-               COALESCE(h.count_24h, 0)        AS count_24h,
-               NULLIF(h.vol_24h_num, 0)::text  AS vol_24h_usd,
-               d.last_price
-          FROM d
-          LEFT JOIN h
-            ON h.base_asset = d.base_asset
-           AND h.quote_asset = d.quote_asset
+        SELECT base_asset, quote_asset, last_trade_at, bucket_close_at,
+               count_24h, NULLIF(vol_24h_num, 0)::text AS vol_24h_usd, last_price
+          FROM canon
     `
 	switch order {
 	case MarketsOrderVolume24hDesc:
@@ -702,23 +755,23 @@ func buildDistinctPairsQuery(since time.Time, source, asset, cursor string, limi
 		// are already grouped).
 		const tail = `
          WHERE $2 = ''
-            OR COALESCE(h.vol_24h_num, 0)
+            OR vol_24h_num
                  <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
             OR (
-                 COALESCE(h.vol_24h_num, 0)
+                 vol_24h_num
                  =  CAST(COALESCE(NULLIF(split_part($2, ':', 1), ''), '0') AS numeric)
-                 AND (d.base_asset || '|' || d.quote_asset)
+                 AND (base_asset || '|' || quote_asset)
                      > substring($2 from position(':' in $2) + 1)
                )
-         ORDER BY COALESCE(h.vol_24h_num, 0) DESC,
-                  (d.base_asset || '|' || d.quote_asset) ASC
+         ORDER BY vol_24h_num DESC,
+                  (base_asset || '|' || quote_asset) ASC
          LIMIT $3
         `
 		return ctes + tail, []any{since, cursor, limit + 1, source, asset}
 	default: // MarketsOrderPair
 		const tail = `
-         WHERE ($2 = '' OR (d.base_asset || '|' || d.quote_asset) > $2)
-         ORDER BY (d.base_asset || '|' || d.quote_asset) ASC
+         WHERE ($2 = '' OR (base_asset || '|' || quote_asset) > $2)
+         ORDER BY (base_asset || '|' || quote_asset) ASC
          LIMIT $3
         `
 		return ctes + tail, []any{since, cursor, limit + 1, source, asset}

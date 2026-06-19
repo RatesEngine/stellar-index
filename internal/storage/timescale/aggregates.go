@@ -328,14 +328,40 @@ func (s *Store) ClosedVWAP1mAtOrBefore(ctx context.Context, p canonical.Pair, t 
 // callers translate that to the API's price-not-found problem or
 // fall back to the latest-trade path.
 func (s *Store) LatestClosedVWAP1mForPair(ctx context.Context, p canonical.Pair) (Vwap1mRow, error) {
+	// Combine BOTH stored directions of the market into the requested
+	// orientation. The SDEX decoder records the same market both ways
+	// (XLM/USDC and USDC/XLM), so reading only (base=$1, quote=$2) used
+	// half the liquidity — and returned ErrNoRows if the latest minute
+	// happened to trade only the flipped way. We read both, and for the
+	// flipped rows invert the vwap (1/vwap) so every row expresses the
+	// price of $1 in $2, then trade-count-weight them within the latest
+	// closed bucket. Closed-bucket-only (ADR-0015) is preserved, and the
+	// combine is deterministic across regions.
 	const q = `
-        SELECT bucket, base_asset, quote_asset, vwap::text, trade_count, sources
-          FROM prices_1m
-         WHERE base_asset = $1
-           AND quote_asset = $2
-           AND bucket + INTERVAL '1 minute' <= now()
-         ORDER BY bucket DESC
-         LIMIT 1
+        WITH closed AS (
+            SELECT bucket, base_asset, vwap,
+                   COALESCE(trade_count, 0) AS tc, sources
+              FROM prices_1m
+             WHERE ((base_asset = $1 AND quote_asset = $2)
+                 OR (base_asset = $2 AND quote_asset = $1))
+               AND bucket + INTERVAL '1 minute' <= now()
+        ),
+        agg AS (
+            SELECT bucket,
+                   (SUM((CASE WHEN base_asset = $1 THEN vwap
+                              ELSE 1.0 / NULLIF(vwap, 0) END) * tc)
+                      / NULLIF(SUM(tc), 0))::text AS vwap,
+                   SUM(tc)::bigint AS trade_count
+              FROM closed
+             GROUP BY bucket
+             ORDER BY bucket DESC
+             LIMIT 1
+        )
+        SELECT a.bucket, $1::text, $2::text, a.vwap, a.trade_count,
+               (SELECT array_agg(DISTINCT sc)
+                  FROM closed c, unnest(c.sources) sc
+                 WHERE c.bucket = a.bucket) AS sources
+          FROM agg a
     `
 	var row Vwap1mRow
 	err := s.db.QueryRowContext(ctx, q,

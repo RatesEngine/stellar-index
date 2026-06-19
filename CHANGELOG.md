@@ -45,6 +45,15 @@ against.
   — far more detail per window.
 
 ### Fixed
+- Flipped markets are no longer double-counted: XLM/USDC and USDC/XLM
+  (the SDEX decoder records both on-chain trade directions) now collapse
+  to a SINGLE market wherever pairs are read — `/v1/markets`, `/v1/pools`,
+  and the per-pair `/v1/price` VWAP. Volume + trade count sum across both
+  directions; the price uses one canonical orientation (quote-rank: fiat
+  > stablecoin > XLM > token, so XLM/USDC quotes in USDC), and the VWAP
+  combines both directions over the latest closed bucket (so it uses full
+  liquidity, and returns a price even when the latest minute traded only
+  the flipped way). Query-time via `canonical.Orient` — no data migration.
 - Charts now label their time axis in the viewer's local timezone
   (intraday) instead of UTC, so the current bar lines up with the
   viewer's wall clock instead of reading an hour "behind". Date labels
