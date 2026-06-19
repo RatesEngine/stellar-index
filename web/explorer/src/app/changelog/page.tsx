@@ -3,6 +3,11 @@ import Link from 'next/link';
 
 import { loadReleases, versionSlug, type Release } from '@/lib/changelog';
 
+// Cap the rendered changelog to the most recent N releases. The full
+// history (242+ sections) inlined to a ~4.4 MB page (audit 2026-06-19);
+// older entries remain in CHANGELOG.md / GitHub releases.
+const RECENT_RELEASES = 40;
+
 export const metadata: Metadata = {
   title: 'Changelog',
   description:
@@ -75,9 +80,26 @@ export default function ChangelogPage() {
         </div>
       ) : (
         <div className="space-y-10">
-          {releases.map((r) => (
+          {/* Cap the rendered set to the most recent releases — the full
+              242-section history inlined to ~4.4 MB of HTML (audit
+              2026-06-19). Older releases stay one click away on GitHub. */}
+          {releases.slice(0, RECENT_RELEASES).map((r) => (
             <ReleaseCard key={r.version} release={r} />
           ))}
+          {releases.length > RECENT_RELEASES && (
+            <p className="text-sm text-ink-muted">
+              Showing the {RECENT_RELEASES} most recent of {releases.length}{' '}
+              releases.{' '}
+              <a
+                href="https://github.com/StellarIndex/stellar-index/blob/main/CHANGELOG.md"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-brand-600 hover:underline"
+              >
+                Full changelog →
+              </a>
+            </p>
+          )}
         </div>
       )}
 

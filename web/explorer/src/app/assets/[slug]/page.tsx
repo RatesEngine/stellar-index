@@ -85,6 +85,20 @@ export async function generateStaticParams() {
       }
     }
   }
+  // Also emit canonical asset_id routes (USDC-GA5Z…, native) so a paste
+  // of an asset_id resolves instead of 404ing (audit 2026-06-19). These
+  // render from the asset_id side index + memoised detail/price fetches,
+  // so they add no per-page API load (the reason emitting asset_ids
+  // previously hung the build is now removed). Single case — asset_ids
+  // aren't case-variant.
+  if (buildCoinsByAssetId) {
+    for (const assetId of buildCoinsByAssetId.keys()) {
+      if (assetId && !seen.has(assetId)) {
+        seen.add(assetId);
+        out.push({ slug: assetId });
+      }
+    }
+  }
   return out.length > 0 ? out : fallback;
 }
 
@@ -230,6 +244,20 @@ let buildCoinsCachePromise:
   | Promise<Map<string, CoinSummary> | null>
   | null = null;
 
+// Side index by asset_id, populated by getBuildCoinsCache. Lets
+// canonical-id routes (/assets/USDC-GA5Z…) and the catalogue resolve
+// without a per-page API call.
+let buildCoinsByAssetId: Map<string, CoinSummary> | null = null;
+
+// Build-time memo for the per-page detail + price fetches. The [slug]
+// route renders BOTH casings + the canonical asset_id of the same
+// asset, all keyed off the same asset_id — without memoising, each
+// duplicate page re-fetched /v1/assets/{id} + /v1/price, doubling the
+// build's API load (which spiked r1 on the 2026-06-19 deploy). Keyed by
+// asset_id so every page form of one asset shares one fetch.
+const buildDetailMemo = new Map<string, Promise<AssetDetail | null>>();
+const buildPriceMemo = new Map<string, Promise<PriceResp | null>>();
+
 function getBuildCoinsCache(): Promise<Map<string, CoinSummary> | null> {
   if (buildCoinsCachePromise) return buildCoinsCachePromise;
   buildCoinsCachePromise = (async () => {
@@ -262,9 +290,15 @@ function getBuildCoinsCache(): Promise<Map<string, CoinSummary> | null> {
       // slug anyway; long-form navigations resolve via the same
       // page through the API at runtime.
       const map = new Map<string, CoinSummary>();
+      const byId = new Map<string, CoinSummary>();
       for (const c of rows) {
         if (c.slug) map.set(c.slug, c);
+        if (c.asset_id) byId.set(c.asset_id, c);
       }
+      // Side index by asset_id for LOOKUP only (canonical-id routes like
+      // /assets/USDC-GA5Z…). Kept out of the slug map so route
+      // generation (cache.keys()) still emits only short slugs.
+      buildCoinsByAssetId = byId;
       return map;
     } catch {
       return null;
@@ -360,27 +394,38 @@ async function fetchCoin(slug: string): Promise<CoinSummary | null> {
   const cache = await getBuildCoinsCache();
   if (cache) {
     const hit =
-      cache.get(slug) ?? cache.get(slug.toUpperCase()) ?? cache.get(norm);
+      cache.get(slug) ??
+      cache.get(slug.toUpperCase()) ??
+      cache.get(norm) ??
+      // Canonical asset_id route (/assets/USDC-GA5Z…) — served from the
+      // asset_id side index so it needs no per-page API call.
+      buildCoinsByAssetId?.get(slug);
     if (hit) return hit;
   }
-  // Cache miss: a slug the listing didn't return — e.g. a canonical
-  // asset_id (USDC-GA5Z…) or a long-tail asset. Fetch it directly.
+  // Cache miss: a slug the listing didn't return — e.g. a long-tail
+  // asset_id. Fetch it directly.
   return fetchCoinDirect(slug);
 }
 
 async function fetchAssetDetail(assetId: string): Promise<AssetDetail | null> {
-  if (isCIStub) return null;
-  try {
-    const res = await fetch(
-      `${API_BASE_URL}/v1/assets/${encodeURIComponent(assetId)}`,
-      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
-    );
-    if (!res.ok) return null;
-    const env = (await res.json()) as { data: AssetDetail };
-    return env.data ?? null;
-  } catch {
-    return null;
-  }
+  const memo = buildDetailMemo.get(assetId);
+  if (memo) return memo;
+  const p = (async (): Promise<AssetDetail | null> => {
+    if (isCIStub) return null;
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/assets/${encodeURIComponent(assetId)}`,
+        { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
+      );
+      if (!res.ok) return null;
+      const env = (await res.json()) as { data: AssetDetail };
+      return env.data ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  buildDetailMemo.set(assetId, p);
+  return p;
 }
 
 /**
@@ -423,6 +468,14 @@ async function fetchPriceDirect(
 // XLM (asset_id "native") short-circuits — its direct USD VWAP
 // is the canonical answer.
 async function fetchPrice(assetId: string): Promise<PriceResp | null> {
+  const memo = buildPriceMemo.get(assetId);
+  if (memo) return memo;
+  const p = fetchPriceUncached(assetId);
+  buildPriceMemo.set(assetId, p);
+  return p;
+}
+
+async function fetchPriceUncached(assetId: string): Promise<PriceResp | null> {
   if (assetId === 'native') {
     return fetchPriceDirect('native', 'fiat:USD');
   }

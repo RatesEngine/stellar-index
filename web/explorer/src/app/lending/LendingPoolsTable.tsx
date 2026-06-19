@@ -167,11 +167,13 @@ export function LendingPoolsTable() {
                       >
                         {p.pool.slice(0, 6)}…{p.pool.slice(-6)}
                       </Link>
-                      {meta?.label && (
-                        <div className="text-[9px] uppercase tracking-wide text-ink-muted">
-                          {meta.label}
-                        </div>
-                      )}
+                      {/* Curated label where we have one; else a generic
+                          "Blend pool" tag so newer/unmapped pools are still
+                          identified rather than shown as a bare hash (audit
+                          2026-06-19). We don't invent pool names. */}
+                      <div className="text-[9px] uppercase tracking-wide text-ink-muted">
+                        {meta?.label ?? 'Blend pool'}
+                      </div>
                     </div>
                   </Td>
                   <Td>

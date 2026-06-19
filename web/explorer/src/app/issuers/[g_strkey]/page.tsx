@@ -309,12 +309,34 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
         </Panel>
 
         <Panel title="Auth flags" panelId="auth-flags-card">
-          <ul className="space-y-1.5 text-xs">
-            <FlagRow label="auth_required" v={detail.auth_required} />
-            <FlagRow label="auth_revocable" v={detail.auth_revocable} />
-            <FlagRow label="auth_immutable" v={detail.auth_immutable} />
-            <FlagRow label="auth_clawback" v={detail.auth_clawback} />
-          </ul>
+          {detail.auth_required == null &&
+          detail.auth_revocable == null &&
+          detail.auth_immutable == null &&
+          detail.auth_clawback == null ? (
+            // The account-flag reader hasn't populated this issuer yet —
+            // show that honestly rather than four "unknown" dots that
+            // read as a broken panel (audit 2026-06-19).
+            <p className="text-xs text-ink-muted">
+              Not yet resolved. Issuer account flags populate as the
+              account-flag reader processes the issuer; meanwhile see{' '}
+              <a
+                href={`https://stellar.expert/explorer/public/account/${g_strkey}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-brand-600 hover:underline"
+              >
+                stellar.expert
+              </a>
+              .
+            </p>
+          ) : (
+            <ul className="space-y-1.5 text-xs">
+              <FlagRow label="auth_required" v={detail.auth_required} />
+              <FlagRow label="auth_revocable" v={detail.auth_revocable} />
+              <FlagRow label="auth_immutable" v={detail.auth_immutable} />
+              <FlagRow label="auth_clawback" v={detail.auth_clawback} />
+            </ul>
+          )}
         </Panel>
       </div>
 
