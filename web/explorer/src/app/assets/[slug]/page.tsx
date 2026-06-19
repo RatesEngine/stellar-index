@@ -13,9 +13,9 @@ import {
   Container,
 } from '@/components/ui';
 import { AssetClientFallback } from './AssetClientFallback';
+import { AssetSidebar } from './AssetSidebar';
 import { AssetTabs, ActiveTabSlot } from './AssetTabs';
 import { AssetAbout } from './AssetAbout';
-import { AssetConverter } from './AssetConverter';
 import { ChartPanel } from './ChartPanel';
 import { PriceSparklines } from './PriceSparklines';
 import { IssuerPanel } from './IssuerPanel';
@@ -722,38 +722,56 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
         )}
       </header>
 
-      {(() => {
-        const parts = coin.asset_id.split('-');
-        const issuer =
-          parts.length === 2 && parts[1].startsWith('G') ? parts[1] : null;
-        return issuer ? (
+      <div className="grid gap-6 lg:grid-cols-[336px_minmax(0,1fr)]">
+        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          <AssetSidebar
+            coin={coin}
+            detail={detail}
+            priceUSD={
+              price?.price
+                ? Number(price.price)
+                : coin.price_usd
+                  ? Number(coin.price_usd)
+                  : null
+            }
+            name={globalView?.name}
+            homeDomain={detail?.home_domain}
+          />
+        </aside>
+
+        <div className="min-w-0 space-y-4">
+          {(() => {
+            const parts = coin.asset_id.split('-');
+            const issuer =
+              parts.length === 2 && parts[1].startsWith('G') ? parts[1] : null;
+            return issuer ? (
+              <Suspense fallback={null}>
+                <IssuerPanel gStrkey={issuer} />
+              </Suspense>
+            ) : null;
+          })()}
+
           <Suspense fallback={null}>
-            <IssuerPanel gStrkey={issuer} />
+            <AssetTabs slug={coin.slug} hasIssuer={false} />
           </Suspense>
-        ) : null;
-      })()}
 
-      <Suspense fallback={null}>
-        <AssetTabs slug={coin.slug} hasIssuer={false} />
-      </Suspense>
-
-      <Suspense fallback={null}>
-        <ActiveTabSlot
-          overview={
-            <OverviewBody coin={coin} detail={detail} price={price} />
-          }
-          chart={<ChartPanel assetID={coin.asset_id} />}
-          markets={<MarketsTabPanel assetID={coin.asset_id} />}
-          history={<HistoryTabPanel assetID={coin.asset_id} />}
-          supply={<SupplyTabPanel assetID={coin.asset_id} />}
-          holders={<HoldersTabPanel assetID={coin.asset_id} />}
-          // Issuer detail is rendered inline above for classic
-          // (G-strkey) issuers.
-          liquidity={
-            <LiquidityTabPanel assetID={coin.asset_id} code={coin.code} />
-          }
-        />
-      </Suspense>
+          <Suspense fallback={null}>
+            <ActiveTabSlot
+              overview={
+                <OverviewBody coin={coin} detail={detail} price={price} />
+              }
+              chart={<ChartPanel assetID={coin.asset_id} />}
+              markets={<MarketsTabPanel assetID={coin.asset_id} />}
+              history={<HistoryTabPanel assetID={coin.asset_id} />}
+              supply={<SupplyTabPanel assetID={coin.asset_id} />}
+              holders={<HoldersTabPanel assetID={coin.asset_id} />}
+              liquidity={
+                <LiquidityTabPanel assetID={coin.asset_id} code={coin.code} />
+              }
+            />
+          </Suspense>
+        </div>
+      </div>
     </Container>
   );
 }
@@ -931,8 +949,6 @@ function OverviewBody({
           )}
         </ul>
       </Panel>
-
-      <AssetConverter symbol={coin.code} priceUSD={priceNum} />
 
       {coin.top_markets && coin.top_markets.length > 0 && (
         <Panel

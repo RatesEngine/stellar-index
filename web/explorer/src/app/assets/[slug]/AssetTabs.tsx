@@ -20,18 +20,20 @@ export type AssetTab =
  */
 export function AssetTabs({ slug, hasIssuer }: { slug: string; hasIssuer: boolean }) {
   const params = useSearchParams();
-  const active = (params.get('tab') as AssetTab) || 'overview';
+  // Chart is the default (the bare /assets/{slug} URL) — the page leads
+  // with price action, with the dense stats always present in the rail.
+  const active = (params.get('tab') as AssetTab) || 'chart';
 
   type T = { key: AssetTab; label: string };
   const tabs: T[] = [
-    { key: 'overview', label: 'Overview' },
     { key: 'chart', label: 'Chart' },
     { key: 'markets', label: 'Markets' },
-    { key: 'history', label: 'History' },
-    { key: 'supply', label: 'Supply' },
+    { key: 'history', label: 'Trades' },
     { key: 'holders', label: 'Holders' },
-    ...(hasIssuer ? ([{ key: 'issuer', label: 'Issuer' }] as const) : []),
     { key: 'liquidity', label: 'Liquidity' },
+    { key: 'supply', label: 'Supply' },
+    ...(hasIssuer ? ([{ key: 'issuer', label: 'Issuer' }] as const) : []),
+    { key: 'overview', label: 'About' },
   ];
 
   return (
@@ -40,7 +42,7 @@ export function AssetTabs({ slug, hasIssuer }: { slug: string; hasIssuer: boolea
         <Link
           key={t.key}
           href={
-            t.key === 'overview' ? `/assets/${slug}` : `/assets/${slug}?tab=${t.key}`
+            t.key === 'chart' ? `/assets/${slug}` : `/assets/${slug}?tab=${t.key}`
           }
           aria-current={t.key === active ? 'page' : undefined}
           className={`border-b-2 px-3 py-2 ${
@@ -109,13 +111,13 @@ function ActiveBody({
   liquidity?: React.ReactNode;
 }) {
   const params = useSearchParams();
-  const tab = (params.get('tab') as AssetTab) || 'overview';
-  if (tab === 'chart') return <>{chart}</>;
+  const tab = (params.get('tab') as AssetTab) || 'chart';
+  if (tab === 'overview') return <>{overview}</>;
   if (tab === 'markets' && markets) return <>{markets}</>;
   if (tab === 'history' && history) return <>{history}</>;
   if (tab === 'supply' && supply) return <>{supply}</>;
   if (tab === 'holders' && holders) return <>{holders}</>;
   if (tab === 'issuer' && issuer) return <>{issuer}</>;
   if (tab === 'liquidity' && liquidity) return <>{liquidity}</>;
-  return <>{overview}</>;
+  return <>{chart}</>;
 }
