@@ -34,8 +34,16 @@ export function MarketsTable() {
   // back to the default.
   const orderBy: 'volume_24h_usd_desc' | 'pair' =
     orderParam === 'pair' ? 'pair' : 'volume_24h_usd_desc';
+  // ?asset=<canonical id or verified slug> restricts to pairs where the
+  // asset appears on either side (server-side filter — see markets.go).
+  // This is the deep-link target for "all markets for this asset" from
+  // the asset + issuer pages.
+  const assetParam = (params.get('asset') ?? '').trim();
 
-  const { data, isLoading, isError, error } = useMarkets(100, orderBy, { sparkline: true });
+  const { data, isLoading, isError, error } = useMarkets(100, orderBy, {
+    sparkline: true,
+    ...(assetParam ? { asset: assetParam } : {}),
+  });
   const [filter, setFilter] = useState('');
 
   const sorted = useMemo(() => {
@@ -82,7 +90,17 @@ export function MarketsTable() {
         source={asExample('/v1/markets', { limit: 100, order_by: orderBy, include: 'sparkline' })}
         bodyClassName="text-sm text-ink-muted"
       >
-        No active markets in the last 14 days.
+        {assetParam ? (
+          <>
+            No active markets for <code className="font-mono">{assetParam}</code>{' '}
+            in the last 14 days.{' '}
+            <Link href="/markets" className="text-brand-600 hover:underline">
+              View all markets →
+            </Link>
+          </>
+        ) : (
+          'No active markets in the last 14 days.'
+        )}
       </Panel>
     );
   }
@@ -94,6 +112,18 @@ export function MarketsTable() {
       source={asExample('/v1/markets', { limit: 100, order_by: orderBy, include: 'sparkline' })}
       bodyClassName="-mx-4"
     >
+      {assetParam && (
+        <div className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-card border border-brand-200 bg-brand-50 px-3 py-2 text-xs">
+          <span className="text-ink-body">
+            Showing markets for{' '}
+            <code className="font-mono text-brand-700">{assetParam}</code> — pairs
+            where it&apos;s the base or quote.
+          </span>
+          <Link href="/markets" className="ml-auto text-brand-600 hover:underline">
+            Clear filter →
+          </Link>
+        </div>
+      )}
       <div className="px-4 pb-3 pt-1">
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <Input

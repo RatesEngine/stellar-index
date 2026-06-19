@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
+import { Breadcrumbs } from '@/components/ui';
+import { useIssuers } from '@/api/hooks';
 import { apiGet, asExample } from '@/api/client';
 import {
   type Envelope,
@@ -78,6 +80,13 @@ export function AccountView() {
     staleTime: 30_000,
   });
 
+  // Is this account a known asset issuer? We match against the top
+  // issuers list — the SAME set /issuers/[g_strkey] pre-renders via
+  // generateStaticParams — so an internal link is guaranteed to
+  // resolve under static export (no 404 on an un-prerendered route).
+  const issuersQ = useIssuers(100);
+  const isKnownIssuer = (issuersQ.data ?? []).some((iss) => iss.g_strkey === id);
+
   if (id.length === 0) {
     return <AccountsDirectory />;
   }
@@ -116,7 +125,17 @@ export function AccountView() {
             <CopyHash value={id} head={16} tail={16} />
           </div>
         </div>
-        <ul className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-body">
+        <ul className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-ink-body">
+          {isKnownIssuer && (
+            <li>
+              <Link
+                href={`/issuers/${encodeURIComponent(id)}`}
+                className="font-medium text-brand-600 hover:underline"
+              >
+                View as issuer — issued assets &amp; auth flags →
+              </Link>
+            </li>
+          )}
           <li>
             <a
               href={`https://stellar.expert/explorer/public/account/${encodeURIComponent(id)}`}
@@ -404,15 +423,13 @@ function Shell({
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
-        <nav className="text-xs text-ink-muted">
-          <Link href="/ledgers" className="hover:text-brand-600">
-            Ledgers
-          </Link>{' '}
-          /{' '}
-          <span className="font-mono text-ink-body">
-            {id ? `${id.slice(0, 8)}…${id.slice(-6)}` : 'account'}
-          </span>
-        </nav>
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Accounts', href: '/accounts' },
+            { label: id ? `${id.slice(0, 8)}…${id.slice(-6)}` : 'account' },
+          ]}
+        />
         <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
       </header>
       {children}

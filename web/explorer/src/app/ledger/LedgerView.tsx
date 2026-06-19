@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
+import { Breadcrumbs } from '@/components/ui';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
 import {
@@ -198,15 +199,13 @@ function Shell({
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-3">
-        <nav className="text-xs text-ink-muted">
-          <Link href="/ledgers" className="hover:text-brand-600">
-            Ledgers
-          </Link>{' '}
-          /{' '}
-          <span className="font-mono text-ink-body">
-            {seq != null ? `#${seq.toLocaleString()}` : '—'}
-          </span>
-        </nav>
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Ledgers', href: '/ledgers' },
+            { label: seq != null ? `#${seq.toLocaleString()}` : '—' },
+          ]}
+        />
         {seq != null && (
           <div className="flex items-center gap-3 text-xs">
             <Link

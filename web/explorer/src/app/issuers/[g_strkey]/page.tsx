@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
+import { Breadcrumbs } from '@/components/ui';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact } from '@/lib/format';
 import { isSafeHomeDomain } from '@/lib/safe-domain';
@@ -140,12 +141,13 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
     return (
       <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <header className="space-y-3">
-          <nav className="text-xs text-ink-muted">
-            <Link href="/issuers" className="hover:text-brand-600">
-              Issuers
-            </Link>{' '}
-            / <span className="font-mono">{shortKey(g_strkey)}</span>
-          </nav>
+          <Breadcrumbs
+            items={[
+              { label: 'Home', href: '/' },
+              { label: 'Issuers', href: '/issuers' },
+              { label: shortKey(g_strkey) },
+            ]}
+          />
           <h1 className="font-mono text-2xl font-semibold tracking-tight">
             {shortKey(g_strkey)}
           </h1>
@@ -222,15 +224,13 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
       )}
 
       <header className="space-y-3">
-        <nav className="text-xs text-ink-muted">
-          <Link href="/issuers" className="hover:text-brand-600">
-            Issuers
-          </Link>{' '}
-          /{' '}
-          <span className="font-mono text-ink-body">
-            {detail.org_name || shortKey(g_strkey)}
-          </span>
-        </nav>
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Issuers', href: '/issuers' },
+            { label: detail.org_name || shortKey(g_strkey) },
+          ]}
+        />
         {detail.org_name ? (
           <>
             <h1 className="text-2xl font-semibold tracking-tight">
@@ -418,6 +418,13 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
                         <span className="ml-2 font-mono text-[11px] text-ink-muted">
                           {a.slug}
                         </span>
+                        <Link
+                          href={`/markets?asset=${encodeURIComponent(a.asset_id)}`}
+                          className="ml-2 text-[11px] text-brand-600 hover:underline"
+                          title={`All markets for ${a.code}`}
+                        >
+                          markets →
+                        </Link>
                       </Td>
                       <Td align="right">
                         <PriceCell raw={coin?.price_usd} />
