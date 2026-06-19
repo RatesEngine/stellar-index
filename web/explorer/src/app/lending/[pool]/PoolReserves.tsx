@@ -25,6 +25,24 @@ interface ReservesResp {
 
 const usdFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
+// Composition palette — distinct hues for the TVL-share bar + legend.
+// Fixed list rather than the semantic up/down tokens because these are
+// categorical (one per reserve), not directional.
+const PALETTE = [
+  'bg-brand-500',
+  'bg-emerald-500',
+  'bg-amber-500',
+  'bg-violet-500',
+  'bg-cyan-500',
+  'bg-pink-500',
+  'bg-orange-500',
+  'bg-slate-400',
+];
+
+function shortAsset(asset: string): string {
+  return `${asset.slice(0, 4)}…${asset.slice(-4)}`;
+}
+
 function tokenAmount(base: string, decimals: number): string {
   const n = Number(base) / 10 ** decimals;
   if (!Number.isFinite(n)) return base;
@@ -47,6 +65,10 @@ export function PoolReserves({ pool }: { pool: string }) {
   });
 
   const reserves = q.data?.reserves ?? [];
+  const priced = reserves
+    .filter((rv) => rv.supplied_usd != null && Number(rv.supplied_usd) > 0)
+    .sort((a, b) => Number(b.supplied_usd) - Number(a.supplied_usd));
+  const totalUsd = priced.reduce((sum, rv) => sum + Number(rv.supplied_usd), 0);
 
   return (
     <Panel
@@ -59,6 +81,31 @@ export function PoolReserves({ pool }: { pool: string }) {
         <div className="text-sm text-ink-body">
           Pool TVL: <span className="font-mono text-ink">{usdFmt.format(Number(q.data.tvl_usd))}</span>{' '}
           <span className="text-ink-muted">(Σ supplied across priced reserves)</span>
+        </div>
+      )}
+      {priced.length > 0 && totalUsd > 0 && (
+        <div className="space-y-2">
+          <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-muted">
+            {priced.map((rv, i) => (
+              <div
+                key={rv.asset}
+                className={PALETTE[i % PALETTE.length]}
+                style={{ width: `${(Number(rv.supplied_usd) / totalUsd) * 100}%` }}
+                title={`${shortAsset(rv.asset)} — ${usdFmt.format(Number(rv.supplied_usd))} (${((Number(rv.supplied_usd) / totalUsd) * 100).toFixed(1)}%)`}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-body">
+            {priced.map((rv, i) => (
+              <span key={rv.asset} className="inline-flex items-center gap-1.5" title={rv.asset}>
+                <span className={`h-2 w-2 rounded-full ${PALETTE[i % PALETTE.length]}`} />
+                <span className="font-mono">{shortAsset(rv.asset)}</span>
+                <span className="text-ink-muted">
+                  {((Number(rv.supplied_usd) / totalUsd) * 100).toFixed(1)}%
+                </span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
       {q.isLoading && <p className="text-sm text-ink-muted">Loading reserve state…</p>}
@@ -105,7 +152,15 @@ export function PoolReserves({ pool }: { pool: string }) {
                   <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
                     {rv.borrowed_usd ? usdFmt.format(Number(rv.borrowed_usd)) : tokenAmount(rv.borrowed, rv.decimals)}
                   </td>
-                  <td className="py-1.5 pr-4 text-right font-mono tabular-nums">{rv.utilization_pct.toFixed(1)}%</td>
+                  <td className="py-1.5 pr-4 text-right font-mono tabular-nums">
+                    <div>{rv.utilization_pct.toFixed(1)}%</div>
+                    <div className="ml-auto mt-1 h-1 w-16 overflow-hidden rounded-full bg-surface-muted">
+                      <div
+                        className="h-full rounded-full bg-brand-500"
+                        style={{ width: `${Math.max(0, Math.min(100, rv.utilization_pct))}%` }}
+                      />
+                    </div>
+                  </td>
                   <td className="py-1.5 pr-4 text-right font-mono tabular-nums text-up-strong">{pct(rv.supply_apr)}</td>
                   <td className="py-1.5 text-right font-mono tabular-nums text-down-strong">{pct(rv.borrow_apr)}</td>
                 </tr>

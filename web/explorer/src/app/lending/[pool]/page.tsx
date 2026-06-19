@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { ExternalLink, ArrowLeft } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
+import { Breadcrumbs } from '@/components/ui';
 import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 
 import { PoolReserves } from './PoolReserves';
@@ -178,13 +178,13 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
-      <Link
-        href="/lending"
-        className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-brand-600"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        All lending pools
-      </Link>
+      <Breadcrumbs
+        items={[
+          { label: 'Home', href: '/' },
+          { label: 'Lending', href: '/lending' },
+          { label: poolName },
+        ]}
+      />
 
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">

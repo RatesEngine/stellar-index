@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
+import { Breadcrumbs } from '@/components/ui';
 import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 import { PoolsTable } from './PoolsTable';
 import { SourceStatsPanel } from './SourceStatsPanel';
+import { SourceTopChart } from './SourceTopChart';
 
 // Curated list of DEX sources with friendly names + audit links.
 // Mirrors the 5 cards on /dexes; per-DEX detail pages are
@@ -105,13 +107,13 @@ export default async function SourceDetailPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
-      <Link
-        href="/dexes"
-        className="inline-flex items-center gap-1.5 text-sm text-ink-body hover:text-brand-600"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        All DEXes
-      </Link>
+      <Breadcrumbs
+        items={[
+          { label: 'Home', href: '/' },
+          { label: 'DEXes', href: '/dexes' },
+          { label: info.name },
+        ]}
+      />
 
       <header className="space-y-2 border-b border-line pb-4">
         <div className="flex flex-wrap items-baseline gap-3">
@@ -128,6 +130,8 @@ export default async function SourceDetailPage({
       </header>
 
       <SourceStatsPanel source={source} />
+
+      <SourceTopChart source={source} sourceName={info.name} />
 
       <PoolsTable source={source} sourceName={info.name} />
 
