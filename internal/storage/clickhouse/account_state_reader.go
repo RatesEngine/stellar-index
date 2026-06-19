@@ -292,3 +292,38 @@ func signerAddress(k xdr.SignerKey) string {
 	}
 	return s
 }
+
+// AccountHomeDomains returns account → home_domain for the given accounts that
+// carry a non-empty home_domain in the current-state projection. Batch helper
+// for the issuer-enrich backfill: the lake doesn't denormalize home_domain to a
+// column, so it's decoded from the account entry XDR. Accounts with no entry /
+// no home_domain are simply absent from the map.
+func (r *ExplorerReader) AccountHomeDomains(ctx context.Context, accounts []string) (map[string]string, error) {
+	if len(accounts) == 0 {
+		return map[string]string{}, nil
+	}
+	const q = `SELECT account_id, entry_xdr FROM stellar.ledger_entries_current FINAL
+		WHERE entry_type = 'account' AND account_id IN (?) AND change_type != 'removed' AND entry_xdr != ''`
+	rows, err := r.conn.Query(ctx, q, accounts)
+	if err != nil {
+		return nil, fmt.Errorf("clickhouse: account home_domains: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[string]string)
+	for rows.Next() {
+		var acct, entryXDR string
+		if err := rows.Scan(&acct, &entryXDR); err != nil {
+			return nil, fmt.Errorf("clickhouse: scan home_domain: %w", err)
+		}
+		var le xdr.LedgerEntry
+		if xdr.SafeUnmarshalBase64(entryXDR, &le) != nil {
+			continue
+		}
+		if acc, ok := le.Data.GetAccount(); ok {
+			if hd := string(acc.HomeDomain); hd != "" {
+				out[acct] = hd
+			}
+		}
+	}
+	return out, rows.Err()
+}

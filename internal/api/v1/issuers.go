@@ -245,22 +245,28 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		SEP1Payload:    row.SEP1Payload,
 		CreationLedger: row.CreationLedger,
 	}
-	// The dedicated issuer-flag resolver isn't populating row.Auth* in
-	// prod (audit 2026-06-19), but we already index the on-chain account
-	// flags bitmask via the explorer's AccountState. Decode it here so
-	// the Auth-flags panel shows real values instead of "not yet
-	// resolved". Stellar AccountEntry flags: AUTH_REQUIRED=1,
-	// AUTH_REVOCABLE=2, AUTH_IMMUTABLE=4, AUTH_CLAWBACK_ENABLED=8.
-	if out.AuthRequired == nil && s.explorer != nil {
+	// The dedicated issuer resolver isn't populating row.Auth* / row.HomeDomain
+	// in prod (audit 2026-06-19), but we already index the on-chain AccountEntry
+	// via the explorer's AccountState. Decode the auth-flags bitmask + the
+	// home_domain here so the issuer panel shows real values instead of "not
+	// yet resolved" (works for dormant issuers too once the account-state
+	// backfill lands — data-truth G2). Stellar AccountEntry flags:
+	// AUTH_REQUIRED=1, AUTH_REVOCABLE=2, AUTH_IMMUTABLE=4, AUTH_CLAWBACK=8.
+	if (out.AuthRequired == nil || out.HomeDomain == "") && s.explorer != nil {
 		if st, aerr := s.explorer.AccountState(iCtx, gStrkey); aerr == nil && st.Exists {
-			req := st.Flags&0x1 != 0
-			rev := st.Flags&0x2 != 0
-			imm := st.Flags&0x4 != 0
-			claw := st.Flags&0x8 != 0
-			out.AuthRequired = &req
-			out.AuthRevocable = &rev
-			out.AuthImmutable = &imm
-			out.AuthClawback = &claw
+			if out.AuthRequired == nil {
+				req := st.Flags&0x1 != 0
+				rev := st.Flags&0x2 != 0
+				imm := st.Flags&0x4 != 0
+				claw := st.Flags&0x8 != 0
+				out.AuthRequired = &req
+				out.AuthRevocable = &rev
+				out.AuthImmutable = &imm
+				out.AuthClawback = &claw
+			}
+			if out.HomeDomain == "" && st.HomeDomain != "" {
+				out.HomeDomain = st.HomeDomain
+			}
 		}
 	}
 	for _, a := range assets {
