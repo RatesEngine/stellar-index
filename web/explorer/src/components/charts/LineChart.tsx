@@ -13,6 +13,8 @@ import {
   type Time,
 } from 'lightweight-charts';
 
+import { localTickMarkFormatter, localCrosshairTimeFormatter } from './localTime';
+
 export type LinePoint = {
   /** Unix epoch seconds */
   time: number;
@@ -116,7 +118,14 @@ export function LineChart({
         timeVisible,
         secondsVisible: false,
         borderColor: 'rgba(148, 163, 184, 0.25)',
+        // Intraday charts (timeVisible) label the axis in the viewer's
+        // local timezone — see ./localTime. Daily charts keep the
+        // default UTC date labels (a daily bucket is a UTC calendar day).
+        ...(timeVisible ? { tickMarkFormatter: localTickMarkFormatter } : {}),
       },
+      ...(timeVisible
+        ? { localization: { timeFormatter: localCrosshairTimeFormatter } }
+        : {}),
       rightPriceScale: {
         borderColor: 'rgba(148, 163, 184, 0.25)',
         // Leave room at the bottom for the volume histogram when present.

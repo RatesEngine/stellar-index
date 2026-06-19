@@ -45,6 +45,10 @@ against.
   — far more detail per window.
 
 ### Fixed
+- Charts now label their time axis in the viewer's local timezone
+  (intraday) instead of UTC, so the current bar lines up with the
+  viewer's wall clock instead of reading an hour "behind". Date labels
+  on daily/weekly views stay UTC (a daily bar is a UTC calendar bucket).
 - Source activity chart no longer shows a gap for the current hour:
   `source_volume_1h` now uses real-time aggregation (migration 0069),
   so the in-progress (not-yet-materialized) hour is computed live

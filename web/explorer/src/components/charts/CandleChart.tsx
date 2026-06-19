@@ -13,6 +13,8 @@ import {
   type Time,
 } from 'lightweight-charts';
 
+import { localTickMarkFormatter, localCrosshairTimeFormatter } from './localTime';
+
 export type CandlePoint = {
   /** Unix epoch seconds */
   time: number;
@@ -79,6 +81,12 @@ export function CandleChart({ data, height = 360, className, ariaLabel }: Candle
         timeVisible: true,
         secondsVisible: false,
         borderColor: 'rgba(148, 163, 184, 0.25)',
+        // Local-time axis labels — see ./localTime. The default is UTC,
+        // which reads as "stale" against a viewer's wall clock.
+        tickMarkFormatter: localTickMarkFormatter,
+      },
+      localization: {
+        timeFormatter: localCrosshairTimeFormatter,
       },
       rightPriceScale: {
         borderColor: 'rgba(148, 163, 184, 0.25)',
