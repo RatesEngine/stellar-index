@@ -17,6 +17,12 @@ against.
 
 ### Changed
 
+- **Explorer visual consistency.** The `/issuers` page now uses the standard
+  `Container`/`PageHeader` (it was the one page on an ad-hoc fixed-width
+  container with a hand-rolled header). Asset sparklines (assets table + home
+  top-assets) now stroke via the `up`/`down` semantic tokens (`currentColor`)
+  instead of frozen — and partly off-palette — hex, so they track the theme.
+
 - **Explorer navigation cohesion.** A market pair's two asset badges (e.g. XLM /
   USDC) are now click-throughs to each asset's page; the tx, contract, and
   market-pair detail pages use the shared `Breadcrumbs` (consistent Home / …

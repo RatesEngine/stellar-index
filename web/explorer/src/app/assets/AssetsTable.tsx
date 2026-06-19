@@ -447,10 +447,14 @@ function RowSparkline({ points }: { points?: { t: string; p?: string | null }[] 
     })
     .join(' ');
   const positive = values[values.length - 1] >= values[0];
-  const stroke = positive ? '#059669' : '#e11d48';
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="inline-block">
-      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width={W}
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      className={`inline-block ${positive ? 'text-up' : 'text-down'}`}
+    >
+      <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

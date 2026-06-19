@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { Container, PageHeader } from '@/components/ui';
 import { IssuersTable } from './IssuersTable';
 
 export const metadata: Metadata = {
@@ -11,18 +12,13 @@ export const metadata: Metadata = {
 
 export default function IssuersPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Issuers</h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Every G-account that has minted at least one classic asset
-          on Stellar, ranked by total observation count across their
-          issued assets. The home_domain column populates as the
-          SEP-1 fetcher worker resolves stellar.toml for each issuer.
-        </p>
-      </header>
-
+    <Container className="space-y-8 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="Directory"
+        title="Issuers"
+        description="Every G-account that has minted at least one classic asset on Stellar, ranked by total observation count across their issued assets. The home_domain column populates as the SEP-1 fetcher resolves stellar.toml for each issuer."
+      />
       <IssuersTable />
-    </div>
+    </Container>
   );
 }

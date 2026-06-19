@@ -227,11 +227,18 @@ function RowSparkline({
     })
     .join(' ');
   const positive = values[values.length - 1] >= values[0];
-  // up / down token values (tailwind.config.ts) — keep charts on-palette.
-  const stroke = positive ? '#16a34a' : '#dc2626';
+  // Use the up/down semantic tokens via currentColor so the sparkline
+  // tracks the palette (tailwind.config.ts) rather than a frozen hex.
   return (
-    <svg width={W} height={H} className="inline-block" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="24h price chart">
-      <path d={path} fill="none" stroke={stroke} strokeWidth={1.25} strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width={W}
+      height={H}
+      className={`inline-block ${positive ? 'text-up' : 'text-down'}`}
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label="24h price chart"
+    >
+      <path d={path} fill="none" stroke="currentColor" strokeWidth={1.25} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
