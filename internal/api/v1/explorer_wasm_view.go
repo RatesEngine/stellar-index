@@ -78,6 +78,20 @@ func (s *Server) handleContractWasm(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, clickhouse.ErrContractWasmUnresolved) {
+			// The reader couldn't find an instance (its entry predates the
+			// capture window). Before reporting a generic miss, check the
+			// operator's SAC-wrapper registry: a contract that wraps a
+			// classic asset is a SAC with no WASM, ever — so even with the
+			// instance uncaptured we can answer definitively rather than
+			// implying a backfill will produce WASM.
+			if s.isKnownSAC(cid) {
+				writeProblem(w, r, "https://api.stellarindex.io/errors/contract-is-sac",
+					"Stellar Asset Contract — no WASM", http.StatusNotFound,
+					"this contract is a Stellar Asset Contract (the built-in SAC host "+
+						"logic behind a classic asset), not a user-uploaded WASM "+
+						"module — there is no WASM bytecode to show")
+				return
+			}
 			writeProblem(w, r, "https://api.stellarindex.io/errors/contract-wasm-not-found",
 				"Contract WASM not found", http.StatusNotFound,
 				"the contract's wasm could not be assembled from the lake — its "+

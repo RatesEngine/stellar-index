@@ -949,6 +949,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SessionAuth:        dashboardBundle.middleware,
 		SessionPeeker:      sessionPeekerAdapter{},
 		SACWrappers:        cfg.Supply.SACWrappers,
+		NetworkPassphrase:  stellarNetworkPassphrase(),
 		USDPeggedClassics:  usdPegs,
 		VerifiedCurrencies: verifiedCurrencies,
 		BackfillCoverage:   backfillCoverageCache,

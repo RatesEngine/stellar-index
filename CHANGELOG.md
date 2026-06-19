@@ -62,11 +62,17 @@ against.
   "unresolved" 404 — so the explorer wrongly said "resolves once a backfill
   lands" for contracts that will never have WASM. SACs now return a distinct
   `contract-is-sac` 404 and the explorer shows "this is a Stellar Asset
-  Contract — no WASM." (Real user contracts whose code was uploaded before
-  the entry-capture window still show the honest "not captured yet" state
-  pending the Phase-C backfill.) `apiGet` now also surfaces the RFC-9457
-  problem `title`/`detail` in thrown errors so clients can tell apart
-  same-status failure modes.
+  Contract — no WASM." Because the busiest SACs (native XLM, USDC) were
+  deployed long ago and their instance entries also predate capture, SACs are
+  detected deterministically too — a contract id is matched against the
+  operator `sac_wrappers` registry AND the computed SAC derivations of the
+  native asset + every verified-catalogue classic asset — so
+  native/USDC/AQUA/… report "SAC, no WASM" without needing a captured
+  instance. (Real user contracts whose code was uploaded before the
+  entry-capture window still show the honest "not captured yet" state pending
+  the Phase-C backfill.) `apiGet` now also surfaces the RFC-9457 problem
+  `title`/`detail` in thrown errors so clients can tell apart same-status
+  failure modes.
 - Class-filtered + unified `/v1/assets` listings now carry `price_usd`.
   `?asset_class=crypto|stablecoin|fiat` (and the explorer's
   `?asset_class=all` first page) projected catalogue rows from the

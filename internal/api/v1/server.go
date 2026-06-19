@@ -96,17 +96,17 @@ type Server struct {
 	protocolBespoke         ProtocolBespokeReader
 	// Per-server TTL + single-flight cache for the expensive
 	// /v1/protocols/{name} detail (lazy-init'd — see cachedProtocolDetail).
-	protoDetailMu        sync.Mutex
-	protoDetailCache     map[string]protoDetailEntry
-	protoDetailFlight    map[string]chan struct{}
+	protoDetailMu     sync.Mutex
+	protoDetailCache  map[string]protoDetailEntry
+	protoDetailFlight map[string]chan struct{}
 	// Per-server TTL + single-flight cache for the broad-coverage
 	// classic circulating-supply map (one ~0.5s ClickHouse GROUP BY over
 	// the trustline slice — see cachedClassicSupply). Backs market-cap
 	// fill on the long tail of /v1/assets.
-	classicSupplyMu     sync.Mutex
-	classicSupplyCache  map[string]string
-	classicSupplyAt     time.Time
-	classicSupplyFlight chan struct{}
+	classicSupplyMu      sync.Mutex
+	classicSupplyCache   map[string]string
+	classicSupplyAt      time.Time
+	classicSupplyFlight  chan struct{}
 	soroswapPairs        SoroswapPairsReader
 	networkStats         NetworkStatsReader
 	marketSources        MarketSourceReader
@@ -176,6 +176,14 @@ type Server struct {
 	// asset symbols. Nil means "operator hasn't configured the map"
 	// — the endpoint serves an empty object.
 	sacWrappers map[string]string
+	// networkPassphrase is the Stellar network passphrase, used to derive
+	// deterministic SAC contract ids for known assets (isKnownSAC). Empty
+	// disables the computed-SAC half of the check (sac_wrappers still apply).
+	networkPassphrase string
+	// knownSACs is the cached union of sac_wrappers + computed SAC ids
+	// (native + verified catalogue), built once via knownSACsOnce.
+	knownSACsOnce sync.Once
+	knownSACs     map[string]struct{}
 	// assetDetailCache is the response-level cache for /v1/assets/{id}.
 	// Stores the pre-rendered JSON bytes + Flags per asset_id with a
 	// short TTL (30s by default). Cache hits skip the entire handler
@@ -693,6 +701,12 @@ type Options struct {
 	// degrades to showing the raw C-strkey.
 	SACWrappers map[string]string
 
+	// NetworkPassphrase is the Stellar network passphrase (pubnet). Used to
+	// derive deterministic SAC contract ids for known assets so the WASM
+	// endpoint can answer "SAC, no WASM" for asset contracts whose instance
+	// predates the lake's capture window. Empty disables the computed half.
+	NetworkPassphrase string
+
 	// USDPeggedClassics is the operator's allow-list of classic
 	// credit assets they trust as 1:1 USD stablecoins. Same list
 	// fed to trades.usd_pegged_classic_assets — wire it through
@@ -829,6 +843,7 @@ func New(opts Options) *Server {
 		globalPrice:             opts.GlobalPrice,
 		globalPriceOpts:         globalPriceOptsWithDefaults(opts.GlobalPriceOpts),
 		sacWrappers:             opts.SACWrappers,
+		networkPassphrase:       opts.NetworkPassphrase,
 		usdPeggedClassics:       opts.USDPeggedClassics,
 		// 120s TTL on /v1/assets/{id} responses. MUST exceed the
 		// selfPrewarmAssetEndpoints cadence (60s) with margin — at the
