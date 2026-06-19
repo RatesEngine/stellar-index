@@ -254,18 +254,26 @@ function WasmPanel({ id }: { id: string }) {
   }
 
   if (isError || !data) {
-    const notCaptured = error instanceof Error && error.message.includes('404');
+    const msg = error instanceof Error ? error.message : '';
+    const isSac = msg.includes('Stellar Asset Contract');
+    const notCaptured = !isSac && msg.includes('404');
+    let body: string;
+    if (isSac) {
+      body =
+        'This is a Stellar Asset Contract — the built-in SAC host logic behind a classic asset (e.g. XLM or USDC). It runs no user-uploaded WASM module, so there’s no bytecode to show.';
+    } else if (notCaptured) {
+      body =
+        'This contract’s on-chain WASM isn’t in the captured ledger window yet — its deploy-time code/instance entry predates live capture. It resolves automatically once a Phase-C backfill lands.';
+    } else {
+      body = `Couldn’t load this contract’s WASM: ${msg || 'unknown error'}.`;
+    }
     return (
       <Panel
         title="Code (WASM)"
         source={source}
         bodyClassName="text-sm text-ink-body"
       >
-        <p>
-          {notCaptured
-            ? 'This contract’s on-chain WASM isn’t in the captured ledger window yet — its deploy-time code/instance entry predates live capture. It resolves automatically once a Phase-C backfill lands.'
-            : `Couldn’t load this contract’s WASM: ${error instanceof Error ? error.message : 'unknown error'}.`}
-        </p>
+        <p>{body}</p>
       </Panel>
     );
   }

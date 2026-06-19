@@ -64,6 +64,19 @@ func (s *Server) handleContractWasm(w http.ResponseWriter, r *http.Request) {
 		if clientAborted(r, err) {
 			return
 		}
+		if errors.Is(err, clickhouse.ErrContractIsSAC) {
+			// The instance IS captured — it's a Stellar Asset Contract, which
+			// runs built-in host logic and has no user WASM module. A distinct
+			// 404 so clients (and the explorer) say "SAC — no WASM" instead of
+			// "not captured yet" (which would be misleading: no backfill will
+			// ever produce WASM for a SAC).
+			writeProblem(w, r, "https://api.stellarindex.io/errors/contract-is-sac",
+				"Stellar Asset Contract — no WASM", http.StatusNotFound,
+				"this contract is a Stellar Asset Contract (the built-in SAC host "+
+					"logic behind a classic asset), not a user-uploaded WASM "+
+					"module — there is no WASM bytecode to show")
+			return
+		}
 		if errors.Is(err, clickhouse.ErrContractWasmUnresolved) {
 			writeProblem(w, r, "https://api.stellarindex.io/errors/contract-wasm-not-found",
 				"Contract WASM not found", http.StatusNotFound,

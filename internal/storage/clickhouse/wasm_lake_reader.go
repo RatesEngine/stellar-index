@@ -21,6 +21,16 @@ import (
 // captured window — see extract.go's G12-03 note). Callers map this to 404.
 var ErrContractWasmUnresolved = errors.New("clickhouse: contract wasm not resolvable from lake")
 
+// ErrContractIsSAC is returned by ContractWasm when the contract's instance
+// IS captured but its executable is a Stellar Asset Contract (the built-in
+// SAC host logic), not a user-uploaded WASM module. SACs — the asset
+// contracts behind `native`, USDC, and every classic asset, which are among
+// the busiest contracts on the network — have no WASM to show, ever; a
+// backfill will never produce one. Distinct from ErrContractWasmUnresolved
+// so the API/UI can say "this is a SAC, no WASM" instead of "not captured
+// yet" (audit 2026-06-19 item 13). Callers map this to a 404 with a SAC note.
+var ErrContractIsSAC = errors.New("clickhouse: contract is a stellar asset contract (no wasm)")
+
 // WasmExport is one exported function of a Soroban contract — its name and
 // the i32/i64/f32/f64 param + result value types parsed from the wasm type
 // section. For a Soroban contract the exported function names are the
@@ -142,11 +152,21 @@ func (r *ExplorerReader) contractWasmHash(ctx context.Context, cid xdr.Hash) (xd
 			continue
 		}
 		inst, ok := cd.Val.GetInstance()
-		if !ok || inst.Executable.Type != xdr.ContractExecutableTypeContractExecutableWasm ||
-			inst.Executable.WasmHash == nil {
+		if !ok {
 			continue
 		}
-		return *inst.Executable.WasmHash, true, rows.Err()
+		switch inst.Executable.Type {
+		case xdr.ContractExecutableTypeContractExecutableWasm:
+			if inst.Executable.WasmHash != nil {
+				return *inst.Executable.WasmHash, true, rows.Err()
+			}
+		case xdr.ContractExecutableTypeContractExecutableStellarAsset:
+			// Instance IS captured, but it's a SAC — no WASM to resolve,
+			// ever. Newest-first ordering means this is the current
+			// executable, so report it distinctly rather than falling
+			// through to the generic "unresolved" 404.
+			return xdr.Hash{}, false, ErrContractIsSAC
+		}
 	}
 	return xdr.Hash{}, false, rows.Err()
 }

@@ -32,7 +32,19 @@ export async function apiGet<T>(
     next: { revalidate: 60 },
   });
   if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText} on ${path}`);
+    // Surface the RFC-9457 problem `title` (and `detail`) in the error so
+    // callers can distinguish failure modes that share a status code — e.g.
+    // a /wasm 404 that is "SAC, no WASM" vs "not captured yet". The status
+    // text is kept first so existing `.includes('404')` checks still match.
+    let extra = '';
+    try {
+      const body = (await res.json()) as { title?: string; detail?: string };
+      if (body?.title) extra = ` — ${body.title}`;
+      if (body?.detail) extra += `${extra ? ':' : ' —'} ${body.detail}`;
+    } catch {
+      /* non-JSON body — keep the bare status line */
+    }
+    throw new Error(`${res.status} ${res.statusText} on ${path}${extra}`);
   }
   return (await res.json()) as T;
 }
