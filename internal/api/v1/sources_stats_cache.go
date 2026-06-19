@@ -33,6 +33,10 @@ type CachedSourcesStatsReader struct {
 	hist       []timescale.SourceVolumeBucket
 	histAt     time.Time
 	histFlight chan struct{}
+
+	hist7d       []timescale.SourceVolumeBucket
+	hist7dAt     time.Time
+	hist7dFlight chan struct{}
 }
 
 // NewCachedSourcesStatsReader wraps `upstream` with a TTL cache.
@@ -136,6 +140,54 @@ func (c *CachedSourcesStatsReader) GetSourceVolumeHistory24h(ctx context.Context
 		c.histAt = time.Now()
 	}
 	c.histFlight = nil
+	c.mu.Unlock()
+	close(done)
+	return rows, err
+}
+
+// GetSourceVolumeHistory7d: same single-flight TTL pattern as the 24h
+// variant, on its own cache slot.
+func (c *CachedSourcesStatsReader) GetSourceVolumeHistory7d(ctx context.Context) ([]timescale.SourceVolumeBucket, error) {
+	if c.ttl <= 0 {
+		return c.upstream.GetSourceVolumeHistory7d(ctx)
+	}
+
+	c.mu.Lock()
+	if time.Since(c.hist7dAt) < c.ttl && c.hist7d != nil {
+		out := c.hist7d
+		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("sources_stats", "volume_history_7d", "hit").Inc()
+		return out, nil
+	}
+
+	if c.hist7dFlight != nil {
+		ch := c.hist7dFlight
+		c.mu.Unlock()
+		select {
+		case <-ch:
+			c.mu.Lock()
+			out := c.hist7d
+			c.mu.Unlock()
+			obs.APICacheOpsTotal.WithLabelValues("sources_stats", "volume_history_7d", "hit").Inc()
+			return out, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	done := make(chan struct{})
+	c.hist7dFlight = done
+	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("sources_stats", "volume_history_7d", "miss").Inc()
+
+	rows, err := c.upstream.GetSourceVolumeHistory7d(ctx)
+
+	c.mu.Lock()
+	if err == nil {
+		c.hist7d = rows
+		c.hist7dAt = time.Now()
+	}
+	c.hist7dFlight = nil
 	c.mu.Unlock()
 	close(done)
 	return rows, err

@@ -18,6 +18,7 @@ interface SourceStats {
   volume_24h_usd?: string;
   markets_count_24h?: number;
   volume_history_24h?: VolumeBucket[];
+  volume_history_7d?: VolumeBucket[];
 }
 
 /**
@@ -41,7 +42,7 @@ export function SourceStatsPanel({
     queryKey: ['/v1/sources', 'stats+sparkline', source],
     queryFn: async () => {
       const env = await apiGet<{ data: SourceStats[] }>('/v1/sources', {
-        include: 'stats,sparkline',
+        include: 'stats,sparkline,sparkline7d',
       });
       return env.data?.find((r) => r.name === source) ?? null;
     },
@@ -79,7 +80,11 @@ export function SourceStatsPanel({
             <span className="text-ink-faint">USD volume / hour (bars)</span>
           </div>
           <div className="mt-2">
-            <SourceActivityChart buckets={data.volume_history_24h} height={200} />
+            <SourceActivityChart
+              buckets24h={data.volume_history_24h}
+              buckets7d={data.volume_history_7d}
+              height={200}
+            />
           </div>
         </div>
       )}

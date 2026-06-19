@@ -117,6 +117,21 @@ type SourceVolumeBucket struct {
 // Same volume-derivation CTE as GetSourceStats; the only
 // difference is the per-hour grouping.
 func (s *Store) GetSourceVolumeHistory24h(ctx context.Context) ([]SourceVolumeBucket, error) {
+	return s.sourceVolumeHistory(ctx, "24 hours")
+}
+
+// GetSourceVolumeHistory7d is the 7-day variant — same hourly grouping
+// (168 buckets/source), powering the source page's 7d activity toggle.
+func (s *Store) GetSourceVolumeHistory7d(ctx context.Context) ([]SourceVolumeBucket, error) {
+	return s.sourceVolumeHistory(ctx, "7 days")
+}
+
+// sourceVolumeHistory returns per-(source, hour) volume + trade count
+// over a trailing window. `window` is a Postgres interval literal bound
+// as $1 (e.g. "24 hours", "7 days") — a bind param, not concatenated.
+// The xlm_usd price CTE stays at 24h (we want the CURRENT XLM/USD rate
+// to value legs, regardless of the history window).
+func (s *Store) sourceVolumeHistory(ctx context.Context, window string) ([]SourceVolumeBucket, error) {
 	const q = `
 		WITH xlm_usd AS (
 		  SELECT vwap
@@ -146,25 +161,25 @@ func (s *Store) GetSourceVolumeHistory24h(ctx context.Context) ([]SourceVolumeBu
 		       ), 0)::text AS volume_usd,
 		       COUNT(*)::bigint AS trade_count
 		  FROM trades
-		 WHERE ts >= date_trunc('hour', NOW() - INTERVAL '24 hours')
+		 WHERE ts >= date_trunc('hour', NOW() - $1::interval)
 		 GROUP BY source, hour
 		 ORDER BY source, hour
 	`
-	rows, err := s.db.QueryContext(ctx, q)
+	rows, err := s.db.QueryContext(ctx, q, window)
 	if err != nil {
-		return nil, fmt.Errorf("timescale: GetSourceVolumeHistory24h: %w", err)
+		return nil, fmt.Errorf("timescale: sourceVolumeHistory: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	var out []SourceVolumeBucket
 	for rows.Next() {
 		var b SourceVolumeBucket
 		if err := rows.Scan(&b.Source, &b.Hour, &b.VolumeUSD, &b.TradeCount); err != nil {
-			return nil, fmt.Errorf("timescale: GetSourceVolumeHistory24h scan: %w", err)
+			return nil, fmt.Errorf("timescale: sourceVolumeHistory scan: %w", err)
 		}
 		out = append(out, b)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("timescale: GetSourceVolumeHistory24h rows: %w", err)
+		return nil, fmt.Errorf("timescale: sourceVolumeHistory rows: %w", err)
 	}
 	return out, nil
 }

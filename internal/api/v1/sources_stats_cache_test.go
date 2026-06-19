@@ -38,6 +38,11 @@ func (f *fakeUpstream) GetSourceVolumeHistory24h(ctx context.Context) ([]timesca
 	return []timescale.SourceVolumeBucket{{Source: "binance", Hour: time.Now()}}, nil
 }
 
+func (f *fakeUpstream) GetSourceVolumeHistory7d(ctx context.Context) ([]timescale.SourceVolumeBucket, error) {
+	f.histCalls.Add(1)
+	return []timescale.SourceVolumeBucket{{Source: "binance", Hour: time.Now()}}, nil
+}
+
 // TestCachedSourcesStatsReader_HitsCachedValue — once warmed, the
 // upstream must NOT be called again within the TTL window.
 func TestCachedSourcesStatsReader_HitsCachedValue(t *testing.T) {

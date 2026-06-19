@@ -16,6 +16,7 @@ import (
 type SourcesStatsReader interface {
 	GetSourceStats(ctx context.Context) ([]timescale.SourceStats, error)
 	GetSourceVolumeHistory24h(ctx context.Context) ([]timescale.SourceVolumeBucket, error)
+	GetSourceVolumeHistory7d(ctx context.Context) ([]timescale.SourceVolumeBucket, error)
 }
 
 // VolumeBucket is one wire-shape hour bucket on the per-source
@@ -33,7 +34,7 @@ type VolumeBucket struct {
 // into a per-source trailing-24h series, zero-filling missing hours so
 // clients render a continuous chart rather than gappy bars. Carries
 // both USD volume + trade count per hour.
-func buildSourceVolumeHistory(buckets []timescale.SourceVolumeBucket) map[string][]VolumeBucket {
+func buildSourceVolumeHistory(buckets []timescale.SourceVolumeBucket, hours int) map[string][]VolumeBucket {
 	type hourRaw struct {
 		vol   string
 		count int64
@@ -48,8 +49,8 @@ func buildSourceVolumeHistory(buckets []timescale.SourceVolumeBucket) map[string
 	out := map[string][]VolumeBucket{}
 	now := time.Now().UTC().Truncate(time.Hour)
 	for src, raw := range rawBySource {
-		series := make([]VolumeBucket, 0, 24)
-		for i := 23; i >= 0; i-- {
+		series := make([]VolumeBucket, 0, hours)
+		for i := hours - 1; i >= 0; i-- {
 			hour := now.Add(time.Duration(-i) * time.Hour)
 			hr := raw[hour]
 			vol := hr.vol
@@ -107,6 +108,10 @@ type Source struct {
 	// filled with zero-volume buckets so the array always has 24
 	// entries, oldest → newest.
 	VolumeHistory24h []VolumeBucket `json:"volume_history_24h,omitempty"`
+	// VolumeHistory7d — same per-hour shape over the trailing 7 days
+	// (168 buckets), populated only when the request includes
+	// `sparkline7d`. Powers the source page's 24h/7d activity toggle.
+	VolumeHistory7d []VolumeBucket `json:"volume_history_7d,omitempty"`
 }
 
 // validSourceClasses is the allow-list of values accepted for the
@@ -158,7 +163,7 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 	// keeps the all-static fast path. `include=stats,sparkline`
 	// additionally joins the per-hour 24h volume series.
 	includeFlags := strings.Split(r.URL.Query().Get("include"), ",")
-	includeStats, includeSparkline := false, false
+	includeStats, includeSparkline, includeSparkline7d := false, false, false
 	for _, f := range includeFlags {
 		switch strings.TrimSpace(f) {
 		case "stats":
@@ -166,6 +171,9 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 		case "sparkline":
 			includeSparkline = true
 			includeStats = true // sparkline implies stats
+		case "sparkline7d":
+			includeSparkline7d = true
+			includeStats = true
 		}
 	}
 	type stats struct {
@@ -175,6 +183,7 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 	}
 	statsBySource := map[string]stats{}
 	historyBySource := map[string][]VolumeBucket{}
+	history7dBySource := map[string][]VolumeBucket{}
 	if includeStats && s.sourcesStats != nil {
 		// 8s ceiling on the stats fan-out — same pattern as
 		// /v1/markets (#1099) and /v1/pools (#1082). Soft-fail
@@ -209,7 +218,17 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 		if err != nil {
 			s.logger.Warn("source volume history", "err", err)
 		} else {
-			historyBySource = buildSourceVolumeHistory(buckets)
+			historyBySource = buildSourceVolumeHistory(buckets, 24)
+		}
+	}
+	if includeSparkline7d && s.sourcesStats != nil {
+		sparkCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		buckets, err := s.sourcesStats.GetSourceVolumeHistory7d(sparkCtx)
+		cancel()
+		if err != nil {
+			s.logger.Warn("source volume history 7d", "err", err)
+		} else {
+			history7dBySource = buildSourceVolumeHistory(buckets, 24*7)
 		}
 	}
 
@@ -232,6 +251,7 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 			VolumeUSD24h:      st.volume,
 			MarketsCount24h:   st.markets,
 			VolumeHistory24h:  historyBySource[name],
+			VolumeHistory7d:   history7dBySource[name],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

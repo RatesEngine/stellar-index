@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.128] — 2026-06-19
+
+### Added
+
+- **Source activity chart: 7d window + hoverable values.** The per-source
+  activity chart (trade-count line over USD-volume bars) gains a 24h/7d toggle
+  and a crosshair legend so both the trade count AND the USD volume are
+  hoverable. `/v1/sources?include=sparkline7d` adds a `volume_history_7d` series
+  (168 hourly buckets) alongside the 24h one — the source-volume-history query is
+  now window-parameterized (`$1::interval`), with a 60s-TTL cache slot. The shared
+  `LineChart` gains an opt-in crosshair legend; non-legend usages are unchanged.
+
 ## [v0.5.0-rc.127] — 2026-06-19
 
 ### Added

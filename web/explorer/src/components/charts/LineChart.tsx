@@ -47,6 +47,18 @@ export type LineChartProps = {
    * Default false (daily series read better without it).
    */
   timeVisible?: boolean;
+  /**
+   * When set, render a crosshair-following legend showing the hovered
+   * point's line value (and volume, when present). Makes the volume
+   * histogram hoverable — lightweight-charts only surfaces the
+   * active-scale value on the axis otherwise.
+   */
+  legend?: {
+    valueLabel: string;
+    volumeLabel?: string;
+    formatValue?: (n: number) => string;
+    formatVolume?: (n: number) => string;
+  };
 };
 
 /**
@@ -65,11 +77,19 @@ export function LineChart({
   ariaLabel,
   area = true,
   timeVisible = false,
+  legend,
 }: LineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
+  // Hold the latest legend config in a ref so the (once-installed)
+  // crosshair handler reads current formatters without re-creating the
+  // chart on every render (the prop is usually an inline literal).
+  const legendCfgRef = useRef(legend);
+  legendCfgRef.current = legend;
+  const legendEnabled = !!legend;
 
   // Resolve trend tone — first vs last value when the caller doesn't
   // specify. Renders green when the series is up, red when down,
@@ -138,6 +158,31 @@ export function LineChart({
       volumeRef.current = volume;
     }
 
+    if (legendEnabled) {
+      chart.subscribeCrosshairMove((param) => {
+        const el = legendRef.current;
+        const cfg = legendCfgRef.current;
+        if (!el || !cfg) return;
+        if (param.time == null || !param.point || param.point.x < 0 || param.point.y < 0) {
+          el.style.opacity = '0';
+          return;
+        }
+        const lv = seriesRef.current ? param.seriesData.get(seriesRef.current) : undefined;
+        const vv = volumeRef.current ? param.seriesData.get(volumeRef.current) : undefined;
+        const valNum = lv && 'value' in lv ? (lv as { value: number }).value : null;
+        const volNum = vv && 'value' in vv ? (vv as { value: number }).value : null;
+        const parts: string[] = [];
+        if (valNum != null) {
+          parts.push(`${cfg.valueLabel}: ${cfg.formatValue ? cfg.formatValue(valNum) : valNum.toLocaleString()}`);
+        }
+        if (volNum != null && cfg.volumeLabel) {
+          parts.push(`${cfg.volumeLabel}: ${cfg.formatVolume ? cfg.formatVolume(volNum) : volNum.toLocaleString()}`);
+        }
+        el.textContent = parts.join('   ·   ');
+        el.style.opacity = parts.length ? '1' : '0';
+      });
+    }
+
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) {
         chart.applyOptions({ width: e.contentRect.width });
@@ -156,7 +201,7 @@ export function LineChart({
     // re-creation; data updates are pushed via setData in the second
     // effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, isUp, hasVolume, area, timeVisible]);
+  }, [height, isUp, hasVolume, area, timeVisible, legendEnabled]);
 
   useEffect(() => {
     seriesRef.current?.setData(toSeries(data));
@@ -164,7 +209,7 @@ export function LineChart({
     chartRef.current?.timeScale().fitContent();
   }, [data]);
 
-  return (
+  const chartDiv = (
     <div
       ref={containerRef}
       className={className}
@@ -175,6 +220,19 @@ export function LineChart({
         `Line chart${data.length ? ` with ${data.length} points` : ''}`
       }
     />
+  );
+
+  // Non-legend usages stay byte-identical (no wrapper). Legend usages
+  // get a relative wrapper with the crosshair-following legend overlay.
+  if (!legend) return chartDiv;
+  return (
+    <div className="relative" style={{ width: '100%', height }}>
+      {chartDiv}
+      <div
+        ref={legendRef}
+        className="pointer-events-none absolute left-2 top-2 rounded border border-line bg-surface/90 px-2 py-1 font-mono text-[11px] text-ink-body opacity-0 shadow-card transition-opacity"
+      />
+    </div>
   );
 }
 
