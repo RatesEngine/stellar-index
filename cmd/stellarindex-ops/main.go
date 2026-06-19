@@ -163,6 +163,11 @@ func realMain() int { //nolint:gocyclo,gocognit,funlen // subcommand switch; eac
 			fmt.Fprintf(os.Stderr, "scan-soroban-events: %v\n", err)
 			return 1
 		}
+	case "state-snapshot":
+		if err := stateSnapshot(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "state-snapshot: %v\n", err)
+			return 1
+		}
 	case "projector-replay":
 		if err := projectorReplay(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "projector-replay: %v\n", err)

@@ -16,6 +16,16 @@ against.
 ## [Unreleased]
 
 ### Added
+- `stellarindex-ops state-snapshot` — reads a history-archive checkpoint's full
+  current ledger-entry state (the bucket list) via the SDK's
+  `CheckpointChangeReader` and tallies it by entry type. The read-only
+  foundation of the data-truth backfill (DATA-TRUTH-PLAN G1–G3): the served
+  `ledger_entries_current` projection only holds entries changed since ledger
+  ~62M, so dormant-pre-62M accounts / trustlines / contract code+instances are
+  missing (the contract-WASM user-contract tail, incomplete account state +
+  issuer flags, possible trustline-supply undercount). A checkpoint snapshot is
+  the source of truth for that tail, read in one pass (no genesis replay). This
+  command quantifies the gap before any backfill is scheduled; it never writes.
 - Staff **customer look-up** (`/account/admin`, audit 2026-06-19 item 16):
   the cockpit's first tool is now live instead of a placeholder. New
   staff-gated `GET /v1/account/admin/lookup?email=|slug=` resolves an
