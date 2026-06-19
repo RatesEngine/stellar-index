@@ -176,6 +176,10 @@ func (h *Handlers) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/auth/callback", h.HandleCallback)
 	mux.HandleFunc("POST /v1/auth/verify-code", h.HandleVerifyCode)
 	mux.HandleFunc("POST /v1/auth/logout", h.HandleLogout)
+	// Staff customer look-up — session-gated (RequireSession) AND staff-gated
+	// (HandleAdminLookup checks IsStaff). Backs /account/admin's first tool.
+	mux.Handle("GET /v1/account/admin/lookup",
+		RequireSession(h.cfg)(http.HandlerFunc(h.HandleAdminLookup)))
 }
 
 // maxCodeAttempts caps wrong 6-digit code guesses against a single

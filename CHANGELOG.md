@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Added
+- Staff **customer look-up** (`/account/admin`, audit 2026-06-19 item 16):
+  the cockpit's first tool is now live instead of a placeholder. New
+  staff-gated `GET /v1/account/admin/lookup?email=|slug=` resolves an
+  account (tier, status, overrides) plus the users on it; the explorer's
+  admin page searches by email or account slug. Double-gated — RequireSession
+  + an explicit `is_staff` check (a non-staff customer gets 403, never another
+  customer's data) — and the access is audit-logged. Tier overrides + incident
+  tooling remain honestly marked "Coming in Phase 1.5" (they need write/
+  impersonation endpoints).
 - `source_volume_1h` continuous aggregate (migration 0068) — per-source
   hourly trade-count + pre-aggregated USD-volume inputs. The source
   page's activity chart now reads this CAGG instead of scanning raw

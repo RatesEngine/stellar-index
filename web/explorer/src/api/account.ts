@@ -173,3 +173,51 @@ export async function fetchUsage(signal?: AbortSignal): Promise<UsageRow[]> {
   });
   return env.data ?? [];
 }
+
+// ─── Staff: customer look-up ───────────────────────────────────────
+
+// Mirrors AdminLookupResponse (internal/api/v1/dashboardauth/handlers_admin.go).
+export interface AdminAccountView {
+  id: string;
+  name: string;
+  slug: string;
+  tier: string;
+  status: string;
+  billing_email?: string;
+  created_at?: string;
+  suspended_reason?: string;
+  rate_limit_per_min_override?: number;
+  monthly_request_quota_override?: number;
+}
+export interface AdminUserView {
+  id: string;
+  email: string;
+  display_name?: string;
+  role: string;
+  is_staff: boolean;
+  email_verified: boolean;
+  last_login_at?: string;
+}
+export interface AdminLookupResult {
+  account: AdminAccountView;
+  users: AdminUserView[];
+}
+
+/**
+ * GET /v1/account/admin/lookup?email=|slug= — staff customer look-up.
+ * Resolves an account by a user's email or by account slug and returns
+ * its tier/status plus the users on it. Staff-only (403 for non-staff);
+ * throws ApiError (404 when nothing matches, surfaced via `.detail`).
+ */
+export async function adminLookup(
+  query: { email?: string; slug?: string },
+  signal?: AbortSignal,
+): Promise<AdminLookupResult> {
+  const params = new URLSearchParams();
+  if (query.email) params.set('email', query.email);
+  if (query.slug) params.set('slug', query.slug);
+  return accountFetch<AdminLookupResult>(
+    `/account/admin/lookup?${params.toString()}`,
+    { signal },
+  );
+}
