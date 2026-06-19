@@ -4,6 +4,7 @@ import { Container, PageHeader, SectionHeader } from '@/components/ui';
 import { BackfillSummary } from './BackfillSummary';
 import { CursorsTable } from './CursorsTable';
 import { HealthSummary } from './HealthSummary';
+import { IngestThroughputChart } from './IngestThroughputChart';
 
 export const metadata: Metadata = {
   title: 'Diagnostics — public system-health view',
@@ -42,6 +43,11 @@ export default function DiagnosticsPage() {
       <section className="space-y-4">
         <SectionHeader title="Live ingest" />
         <HealthSummary />
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader title="Throughput" />
+        <IngestThroughputChart />
       </section>
 
       <section className="space-y-4">
