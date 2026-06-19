@@ -3,7 +3,10 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
+
+	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
 // Protocol-analytics reads (ADR-0038 explorer / per-protocol pages). These
@@ -55,29 +58,74 @@ func (r *ExplorerReader) ProtocolEventBreakdown(ctx context.Context, contractIDs
 	if len(contractIDs) == 0 {
 		return nil, nil
 	}
-	q := `SELECT topic_0_sym, count() AS c
+	// Group by topic[0]'s denormalized symbol. For events whose topic[0] is
+	// NOT a Symbol — the lake leaves topic_0_sym empty — also carry the raw
+	// topic[1] so we can recover the real event name from it. Soroswap is the
+	// dominant case: its events are [String("SoroswapPair"), Symbol(name)], so
+	// the event name (swap/sync/deposit/withdraw/skim) lives in topic[1].
+	// The if() keeps Symbol-topic[0] events grouped by their symbol (topic[1]
+	// coalesced away) and splits only the empty bucket by topic[1].
+	q := `SELECT topic_0_sym, if(topic_0_sym = '', topics_xdr[2], '') AS t1, count() AS c
 		FROM stellar.contract_events
-		WHERE contract_id IN (?) AND event_type = 'contract' AND topic_0_sym != ''`
+		WHERE contract_id IN (?) AND event_type = 'contract'`
 	args := []any{contractIDs}
 	if sinceLedger > 0 {
 		q += ` AND ledger_seq >= ?`
 		args = append(args, sinceLedger)
 	}
-	q += ` GROUP BY topic_0_sym ORDER BY c DESC LIMIT 100`
+	q += ` GROUP BY topic_0_sym, t1 ORDER BY c DESC LIMIT 200`
 	rows, err := r.conn.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse: protocol event breakdown: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var out []ProtocolEventTypeCount
+	// Aggregate by effective event name: topic_0_sym when present, else the
+	// decoded topic[1] Symbol. Rows whose name can't be recovered (neither
+	// topic is a Symbol) are dropped here — protocols.go's reconcile folds
+	// them into the "untyped" remainder against the unfiltered total.
+	byName := make(map[string]uint64)
 	for rows.Next() {
-		var e ProtocolEventTypeCount
-		if err := rows.Scan(&e.EventType, &e.Count); err != nil {
+		var sym, t1 string
+		var c uint64
+		if err := rows.Scan(&sym, &t1, &c); err != nil {
 			return nil, fmt.Errorf("clickhouse: scan event breakdown: %w", err)
 		}
-		out = append(out, e)
+		name := sym
+		if name == "" {
+			dec, ok := decodeTopicSymbol(t1)
+			if !ok {
+				continue
+			}
+			name = dec
+		}
+		byName[name] += c
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]ProtocolEventTypeCount, 0, len(byName))
+	for name, c := range byName {
+		out = append(out, ProtocolEventTypeCount{EventType: name, Count: c})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out, nil
+}
+
+// decodeTopicSymbol decodes a base64-XDR ScVal and returns its Symbol string,
+// ok=false when empty or not a Symbol. Recovers the event name from topic[1]
+// for protocols whose topic[0] is a non-Symbol marker (Soroswap).
+func decodeTopicSymbol(b64 string) (string, bool) {
+	if b64 == "" {
+		return "", false
+	}
+	var v xdr.ScVal
+	if err := xdr.SafeUnmarshalBase64(b64, &v); err != nil {
+		return "", false
+	}
+	if s, ok := v.GetSym(); ok {
+		return string(s), true
+	}
+	return "", false
 }
 
 // ProtocolDailyActivity returns daily contract-event counts for a protocol's

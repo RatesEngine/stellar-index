@@ -102,6 +102,14 @@ against.
   fields, so the cold path is ~5s — comfortably under the 25s ceiling. The
   "untyped" reconciling bucket is appended after the barrier (it needs the
   series total). Repeat hits stay instant via the cache below.
+- `/v1/protocols/{name}` event breakdown now NAMES AMM swap/sync events
+  instead of lumping them into "untyped" (data-truth G4). Soroswap's events
+  are `[String("SoroswapPair"), Symbol(name)]`, so the lake's `topic_0_sym`
+  (which only captures a Symbol topic[0]) is empty and the real event name
+  lives in topic[1]. The breakdown now recovers it: when topic[0] isn't a
+  Symbol, it decodes topic[1]'s Symbol from the raw `topics_xdr` — so
+  soroswap shows `swap`/`sync`/`deposit`/`withdraw`/`skim` (≈190k events that
+  were "untyped") and the untyped remainder collapses to ~0.
 - `/v1/protocols/{name}` is now served from a 60s per-server single-flight
   cache, so concurrent requests no longer each re-run the ~15s lake scans
   and peg CPU (compounding the 25s ceiling below).
