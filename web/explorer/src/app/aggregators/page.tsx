@@ -25,6 +25,8 @@ type Entry = {
   contractsRepo?: string;
   contractRefs?: ContractRef[];
   homepage?: string;
+  /** Internal protocol-page slug (/protocols/<slug>) when one exists. */
+  protocolSlug?: string;
 };
 
 const ENTRIES: Entry[] = [
@@ -38,6 +40,7 @@ const ENTRIES: Entry[] = [
       'Per the protocol-class contract, routers are in `/v1/sources` with class=aggregator and contribute zero VWAP weight by default. Including them would double-count the underlying pair trade.',
     ],
     contractsRepo: 'https://github.com/soroswap/core',
+    protocolSlug: 'soroswap',
     contractRefs: [
       // Sourced from soroswap/core public/mainnet.contracts.json,
       // last verified 2026-05-08.
@@ -56,6 +59,7 @@ const ENTRIES: Entry[] = [
       'Excluded from VWAP — yield-aggregator inflows are not price-discovery events.',
     ],
     contractsRepo: 'https://github.com/paltalabs/defindex',
+    protocolSlug: 'defindex',
     contractRefs: [
       // Sourced from paltalabs/defindex public/mainnet.contracts.json,
       // last verified 2026-05-08.
@@ -135,7 +139,7 @@ export default function AggregatorsPage() {
 
 function Card({ entry }: { entry: Entry }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
+    <div className="rounded-card border border-line bg-surface p-5 shadow-card">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight">{entry.name}</h2>
         <span
@@ -170,21 +174,27 @@ function Card({ entry }: { entry: Entry }) {
                 <span className="text-ink-body">
                   {c.label}
                 </span>
-                <a
-                  href={`https://stellar.expert/explorer/public/contract/${c.cstrkey}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
+                <Link
+                  href={`/contract?id=${encodeURIComponent(c.cstrkey)}`}
                   className="font-mono text-[11px] text-brand-600 hover:underline"
-                  title={c.cstrkey}
+                  title={`${c.cstrkey} — contract events + code`}
                 >
                   {c.cstrkey.slice(0, 6)}…{c.cstrkey.slice(-4)}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>
         </div>
       )}
       <div className="mt-4 flex flex-wrap gap-3 text-xs">
+        {entry.protocolSlug && (
+          <Link
+            href={`/protocols/${entry.protocolSlug}`}
+            className="inline-flex items-center gap-1 font-medium text-brand-600 hover:underline"
+          >
+            Protocol analytics →
+          </Link>
+        )}
         {entry.homepage && (
           <a
             href={entry.homepage}
