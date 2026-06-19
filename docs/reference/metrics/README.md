@@ -348,6 +348,23 @@ stale by N minutes" expressible as `time() - <gauge>` rather than
 multi-window rate math, which simplifies alerting (see
 `stellarindex_external_poller_stale`).
 
+### `stellarindex_external_dust_dropped_total`
+
+Counter, label `source`.
+
+Streamed CEX trades dropped at ingest as **dust** — the quote leg is
+below ~$0.001 (the 10^8-scale floor `minStreamQuoteUnits`). CEX feeds
+emit sub-microcent fills whose tiny integer amounts make `quote/base` a
+meaningless round fraction (1/8, 1/10, …); ingested, they set the
+**unweighted** OHLC high/low (`max/min(quote/base)`) and produced absurd
+wicks on the served `/v1/ohlc` API while carrying ~zero real volume.
+
+When to look: a non-trivial rate here is expected and healthy (it's the
+noise we're filtering out). A sudden drop to zero for a normally-dusty
+venue (e.g. `coinbase`) can mean the streamer wedged — cross-check
+`stellarindex_external_poller_last_success_unix` / the CEX stream
+disconnect counter.
+
 ### `stellarindex_discovery_dropped_hits_total`
 
 Counter, no labels.

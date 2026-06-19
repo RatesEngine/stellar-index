@@ -58,6 +58,7 @@ func registerAppMetrics() {
 		SourceOrphanEventsTotal,
 		ExternalPollerPollsTotal,
 		ExternalPollerLastSuccessUnix,
+		ExternalDustDroppedTotal,
 		CEXStreamDisconnectTotal,
 		DiscoveryDroppedHitsTotal,
 		DiscoverySkippedHitsTotal,
@@ -586,6 +587,20 @@ var ExternalPollerPollsTotal = prometheus.NewCounterVec(
 		Help: "External poller invocations, labelled by source and outcome (success | error | skipped).",
 	},
 	[]string{"source", "outcome"},
+)
+
+// ExternalDustDroppedTotal — per-source counter of streamed CEX trades
+// dropped at ingest as dust (quote leg below ~$0.001). CEX feeds emit
+// sub-microcent fills whose tiny integer amounts make quote/base a
+// meaningless round fraction (1/8, 1/10, …); kept, they polluted the
+// unweighted OHLC high/low (max/min of quote/base) on the served API
+// while contributing ~zero real volume. See the runner's dust guard.
+var ExternalDustDroppedTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "stellarindex_external_dust_dropped_total",
+		Help: "Streamed CEX trades dropped at ingest as sub-$0.001 dust, by source.",
+	},
+	[]string{"source"},
 )
 
 // CEXStreamDisconnectTotal — per-source, per-reason counter of CEX

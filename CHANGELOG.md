@@ -45,6 +45,14 @@ against.
   — far more detail per window.
 
 ### Fixed
+- CEX dust no longer pollutes OHLC high/low on the API. Sub-$0.001
+  streamed CEX fills — tiny integer amounts whose `quote/base` is a
+  meaningless round fraction (1/8, 1/10, …) — are dropped at ingest
+  (new `stellarindex_external_dust_dropped_total`). Ingested, a single
+  such $0.00000001 fill set the **unweighted** `/v1/ohlc` high/low
+  (e.g. an XLM/USD low wick of $0.125) while carrying ~zero real volume;
+  the candle body (volume-weighted VWAP) was always correct. Existing
+  dust was purged and the price CAGGs re-derived.
 - Flipped markets are no longer double-counted: XLM/USDC and USDC/XLM
   (the SDEX decoder records both on-chain trade directions) now collapse
   to a SINGLE market wherever pairs are read — `/v1/markets`, `/v1/pools`,

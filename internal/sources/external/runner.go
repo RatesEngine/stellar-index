@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"sync"
 	"time"
 
@@ -12,6 +13,20 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/consumer"
 	"github.com/StellarIndex/stellar-index/internal/obs"
 )
+
+// minStreamQuoteUnits is the quote-leg floor — in the external 10^8
+// integer scale, ≈ $0.001 — below which a STREAMED CEX trade is dropped
+// as dust. CEX feeds emit sub-microcent fills whose amounts are tiny
+// integers (e.g. 8 base for 1 quote), making quote/base a meaningless
+// round fraction (1/8, 1/10, …). Kept, those single dust prints set the
+// UNWEIGHTED OHLC high/low (max/min of quote/base) and produced absurd
+// wicks on the served /v1/ohlc API — e.g. an XLM/USD low of $0.125 from
+// a $0.00000001 fill — while contributing ~zero real volume. CEX
+// reference pairs are USD-quoted, so the quote leg is the USD value and
+// a real fill is worth far more than a tenth of a cent. Streamers are
+// all CEX at the 10^8 scale; the FX pollers (10^6) don't emit dust, so
+// this guard is scoped to the streamer path.
+var minStreamQuoteUnits = canonical.NewAmount(big.NewInt(100_000))
 
 // StreamerSpec is a configured streamer + the pair list it should
 // subscribe to. Returned by each venue package's builder so the
@@ -178,6 +193,13 @@ func forwardTrades(
 				logger.Info("external streamer closed",
 					"source", source)
 				return
+			}
+			// Drop sub-$0.001 dust fills — see minStreamQuoteUnits. They
+			// carry no meaningful price (integer-quantised round-fraction
+			// ratios) and corrupt the OHLC high/low if ingested.
+			if trade.QuoteAmount.Cmp(minStreamQuoteUnits) < 0 {
+				obs.ExternalDustDroppedTotal.WithLabelValues(source).Inc()
+				continue
 			}
 			select {
 			case <-ctx.Done():
