@@ -12,7 +12,7 @@ The customer-facing incident posts now live at
 They were moved out of `docs/operations/incidents/` so the
 stellarindex-api binary can `go:embed` them at build time and serve
 the parsed corpus via `GET /v1/incidents`. The public status page
-(status.stellarindex.io) reads from that endpoint instead of the
+(stellarindex.io/status) reads from that endpoint instead of the
 hardcoded array it shipped with previously.
 
 ## Why the move

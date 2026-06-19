@@ -68,4 +68,4 @@ preemptively before page-worthy thresholds are reached." -->
 ---
 
 *Next update at {{utc_next_update}}. Status page:
-<https://status.stellarindex.io>.*
+<https://stellarindex.io/status>.*

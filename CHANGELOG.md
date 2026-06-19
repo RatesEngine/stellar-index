@@ -17,6 +17,17 @@ against.
 
 ### Changed
 
+- **Status page moved onto the main site at `/status`.** The standalone status
+  app (its own Cloudflare Pages project at `status.stellarindex.io`) is now a
+  `/status` route inside the explorer, so it inherits the site's nav/footer —
+  one site, one navigation. Per-incident postmortems live at
+  `/status/incident/[slug]`. The old subdomain 301-redirects every path to
+  `https://stellarindex.io/status` (`web/status/public/_redirects`, deep-links
+  preserved) — no DNS change; the existing `stellarindex-status` CF Pages
+  project just serves the redirect now. Every in-app "Status" link (footer,
+  sidebar, search, degraded banner, error states, contact) + the sitemap now
+  point at `/status`.
+
 - **Explorer visual consistency.** The `/issuers` page now uses the standard
   `Container`/`PageHeader` (it was the one page on an ad-hoc fixed-width
   container with a hand-rolled header). Asset sparklines (assets table + home

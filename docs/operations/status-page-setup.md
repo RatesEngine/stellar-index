@@ -6,6 +6,11 @@ status: operator runbook
 
 # Public status page setup
 
+> **Moved (2026-06):** the live status page now lives on the main site at
+> `https://stellarindex.io/status`. The `status.stellarindex.io` subdomain +
+> its `stellarindex-status` CF Pages project still exist but are **redirect-only**
+> (`web/status/public/_redirects` 301s every path to `/status`). No DNS change.
+
 The Stellar Index public status page lives at
 `https://status.stellarindex.io`. The source lives in this repo at
 [`web/status/`](../../web/status/) — a static Next.js export

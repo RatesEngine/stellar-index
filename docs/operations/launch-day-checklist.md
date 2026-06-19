@@ -99,7 +99,7 @@ The week before the cut. Done while everything is still calm.
 - [ ] **Status page provisioned.** Per
       [`status-page-setup.md`](status-page-setup.md). The
       Cloudflare Pages deploy of `web/status/` is live at
-      `status.stellarindex.io`; `internal/incidents/data/`
+      `stellarindex.io/status`; `internal/incidents/data/`
       has no open SEV entries (no `status: investigating |
       identified | monitoring` rows).
 - [ ] **Customer comms ready.** Email/Slack draft for the
@@ -184,7 +184,7 @@ Order matters. Don't skip.
    `internal/incidents/data/<DATE>-launch-cut.md` (if a
    maintenance entry was opened pre-cut) and merging to `main`
    so Cloudflare Pages re-deploys with `status: resolved`.
-   Verify `status.stellarindex.io` shows no active incidents.
+   Verify `stellarindex.io/status` shows no active incidents.
 
 7. **Send customer comms.** Email + Slack templates from T-1 day.
    Public announcement on the project handle if applicable.
@@ -207,7 +207,7 @@ Order matters. Don't skip.
   any external network.
 - `https://stellarindex.io` returns 200 and renders live
   data in the home Network panel.
-- `https://status.stellarindex.io` shows "all systems
+- `https://stellarindex.io/status` shows "all systems
   operational".
 - The customer-comms message has been delivered.
 - The SLA probe has logged at least one passing run against the

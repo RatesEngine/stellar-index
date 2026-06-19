@@ -21,7 +21,7 @@ ledger lake, served tier, REST + SSE API, and the aggregator (VWAP/TWAP,
 triangulation, anomaly response, multi-factor confidence, freeze policy,
 supply pipeline). A live deployment serves [stellarindex.io](https://stellarindex.io),
 [docs.stellarindex.io](https://docs.stellarindex.io), and a public
-[status page](https://status.stellarindex.io).
+[status page](https://stellarindex.io/status).
 **License:** Apache-2.0.
 **Tested against:** Stellar pubnet protocol 23 (post-P23 / CAP-67 unified events).
 

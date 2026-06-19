@@ -36,7 +36,7 @@ curl 'https://api.stellarindex.io/v1/price?base=native&quote=fiat:USD' | jq .
 
 API documentation: <https://docs.stellarindex.io>.
 Getting-started walkthrough: <https://docs.stellarindex.io/getting-started>.
-Status: <https://status.stellarindex.io>.
+Status: <https://stellarindex.io/status>.
 
 ## What's covered today
 
@@ -65,6 +65,6 @@ exploration; an API key bumps you to 1000 rpm.)
 
 - Bug reports / feature requests: <https://github.com/StellarIndex/stellar-index/issues>
 - Security: `security@stellarindex.io`
-- Operational status: <https://status.stellarindex.io>
+- Operational status: <https://stellarindex.io/status>
 
 — {{your_name}}

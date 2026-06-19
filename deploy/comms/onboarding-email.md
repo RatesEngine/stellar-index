@@ -80,7 +80,7 @@ budget is left in the current window. 429 responses include
 ## Help
 
 - Bug reports / feature requests: <https://github.com/StellarIndex/stellar-index/issues>
-- Status: <https://status.stellarindex.io>
+- Status: <https://stellarindex.io/status>
 - Direct support: reply to this email.
 
 Welcome aboard.

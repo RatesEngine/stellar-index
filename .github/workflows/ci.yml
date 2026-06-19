@@ -373,7 +373,8 @@ jobs:
       - run: pnpm audit --audit-level high
 
   # ────────────────────────────────────────────────────────────────
-  # Status page — public-facing status.stellarindex.io. Replaces
+  # Status page — the status.stellarindex.io project is now redirect-only
+  # (the page lives at stellarindex.io/status). Replaces
   # the cstate Hugo build with a custom Next.js static-export.
   # ────────────────────────────────────────────────────────────────
   web-status:

@@ -1,7 +1,7 @@
 # Stellar Index — public status page
 
 Public status page for the Stellar Index API. Lives at
-`status.stellarindex.io` post-launch.
+`stellarindex.io/status` post-launch.
 
 This is the shipped implementation of the status-page surface
 chosen in

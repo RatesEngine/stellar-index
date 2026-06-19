@@ -366,7 +366,7 @@ Defined in `deploy/monitoring/rules/archive-completeness.yml` per
 
 ## Status-page integration
 
-Public status page at `https://status.stellarindex.io` (planned per
+Public status page at `https://stellarindex.io/status` (planned per
 [sev-playbook.md §5.3](sev-playbook.md#53-public-status-page)).
 
 Two status-page indicators tied to archive completeness:

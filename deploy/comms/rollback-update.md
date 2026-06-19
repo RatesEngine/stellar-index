@@ -61,6 +61,6 @@ within {{postmortem_eta}}, including:
   would have caught this pre-launch.
 
 Until then, things are stable on {{previous_tag}}. Status:
-<https://status.stellarindex.io>.
+<https://stellarindex.io/status>.
 
 — {{your_name}}

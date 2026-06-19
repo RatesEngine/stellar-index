@@ -1,5 +1,7 @@
 # Cloudflare Pages config for the public status page
-# (status.stellarindex.io).
+# (status.stellarindex.io) — now a REDIRECT-ONLY project: public/_redirects
+# 301s every path to https://stellarindex.io/status (the page moved onto the
+# main site). Kept deployed so the subdomain + its TLS cert keep resolving.
 #
 # Recommended deploy path is Cloudflare Pages' git integration —
 # every push to main rebuilds and deploys without consuming the

@@ -175,7 +175,7 @@ Decision tree:
 
 ### 5.1 Status page
 
-Public status page lives at `https://status.stellarindex.io` —
+Public status page lives at `https://stellarindex.io/status` —
 hosted as a static Next.js export at
 [`web/status/`](../../web/status/), deployed to Cloudflare Pages
 on every push to `main`. Lives separately from the API so it

@@ -12,7 +12,7 @@ related:
 
 The customer-facing companion to the on-call escalation flow.
 Every SEV that meets the visibility threshold below MUST be
-posted to `status.stellarindex.io`; this runbook is the binding
+posted to `stellarindex.io/status`; this runbook is the binding
 how-to.
 
 F-1211 (codex audit-2026-05-12): the prior version of this
@@ -64,7 +64,7 @@ $EDITOR "${DATE}-${SLUG}.md"
 ```
 
 `<slug>` is what appears in the incident URL
-(`status.stellarindex.io/incident/${DATE}-${SLUG}`) so make it
+(`stellarindex.io/status/incident/${DATE}-${SLUG}`) so make it
 informative; the front-matter `title` field is what the customer
 reads on the index page.
 
@@ -132,7 +132,7 @@ gh pr merge --squash --auto
 
 The `web/status` Cloudflare Pages deploy fires automatically on
 the merge into `main` and renders the new incident at
-`status.stellarindex.io` within a minute or two. Verify the
+`stellarindex.io/status` within a minute or two. Verify the
 incident lands on the index page before stepping away.
 
 ### 5 — Customer webhook fan-out (optional but expected)

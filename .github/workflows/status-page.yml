@@ -1,5 +1,8 @@
 ---
-# Manual-trigger Cloudflare Pages deploy for status.stellarindex.io.
+# Manual-trigger Cloudflare Pages deploy for the status.stellarindex.io
+# project — now REDIRECT-ONLY (web/status/public/_redirects 301s to
+# stellarindex.io/status). The live status page moved onto the main
+# explorer at /status; this deploy just keeps the redirect + cert fresh.
 #
 # **The recommended publish path is Cloudflare's git integration**
 # — it auto-deploys on every push to main without consuming GitHub
