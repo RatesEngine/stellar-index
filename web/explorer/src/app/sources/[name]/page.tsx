@@ -1,9 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { Breadcrumbs } from '@/components/ui';
 import { SourceStatsPanel } from '@/app/dexes/[source]/SourceStatsPanel';
+import { SourceTopChart } from '@/app/dexes/[source]/SourceTopChart';
 import { formatCompact } from '@/lib/format';
 import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
+
+// Sources that also have a dedicated DEX or CEX detail page — used to
+// offer a "view as …" cross-link from the generic source profile.
+const DEX_PAGES = new Set(['soroswap', 'phoenix', 'aquarius', 'sdex', 'comet']);
+const EXCHANGE_PAGES = new Set(['binance', 'coinbase', 'kraken', 'bitstamp']);
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.stellarindex.io';
@@ -193,12 +200,13 @@ export default async function SourceDetailPage({
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLD) }}
       />
       <header className="space-y-3">
-        <Link
-          href="/sources"
-          className="inline-flex items-center gap-1 text-xs text-ink-muted hover:text-brand-600"
-        >
-          ← All sources
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Sources', href: '/sources' },
+            { label: name },
+          ]}
+        />
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-3xl font-semibold tracking-tight">{name}</h1>
           <ClassBadge cls={source.class} />
@@ -211,6 +219,24 @@ export default async function SourceDetailPage({
             <span className="rounded bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
               paid
             </span>
+          )}
+        </div>
+        {/* Cross-link to the richer category view when one exists. */}
+        <div className="flex flex-wrap gap-3 text-xs">
+          {(DEX_PAGES.has(name) || source.subclass === 'dex') && (
+            <Link href={`/dexes/${encodeURIComponent(name)}`} className="text-brand-600 hover:underline">
+              View as DEX — pools &amp; chart →
+            </Link>
+          )}
+          {EXCHANGE_PAGES.has(name) && (
+            <Link href={`/exchanges/${encodeURIComponent(name)}`} className="text-brand-600 hover:underline">
+              View exchange page →
+            </Link>
+          )}
+          {source.class === 'oracle' && (
+            <Link href="/oracles" className="text-brand-600 hover:underline">
+              View in oracles →
+            </Link>
           )}
         </div>
       </header>
@@ -265,6 +291,8 @@ export default async function SourceDetailPage({
         source={name}
         unitsLabel={source.class === 'exchange' && source.subclass !== 'dex' ? 'pairs' : 'pools'}
       />
+
+      <SourceTopChart source={name} sourceName={name} />
 
       <Panel
         title="Ingest cursors"
