@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
 import { Breadcrumbs } from '@/components/ui';
+import { AccountPositions } from './AccountPositions';
 import { useIssuers } from '@/api/hooks';
 import { apiGet, asExample } from '@/api/client';
 import {
@@ -155,6 +156,8 @@ export function AccountView() {
           Incoming coverage tracks the participant-index backfill.
         </p>
       </Panel>
+
+      <AccountPositions id={id} />
 
       <AccountStatePanel id={id} state={stateQ.data} isLoading={stateQ.isLoading} isError={stateQ.isError} />
 
