@@ -69,6 +69,17 @@ against.
   (2026-06-19 incident). Added a 25s timeout; the enrichment helpers
   degrade gracefully on cancellation. (The proper fix — a CAGG so these
   are fast — is tracked in docs/archive/page-audit-2026-06-19/.)
+- `/v1/protocols/{name}` event counts now reconcile (audit 2026-06-19
+  item 8). `events_total` was the typed-breakdown sum, which counts only
+  events whose topic[0] is a denormalized Symbol in the lake — so for
+  Soroswap it read 236 while the activity chart summed to ~200k (the
+  swap/sync events carry a non-Symbol topic[0]), and it could even fall
+  *below* `events_24h`. `events_total` is now the unfiltered window total
+  (= the activity-series sum), and `event_breakdown` carries a synthetic
+  `untyped` bucket for the non-Symbol-topic'd remainder, so
+  `sum(event_breakdown) == events_total == sum(activity_series)`. This also
+  fixes protocols (e.g. phoenix) showing an empty breakdown while the chart
+  had data.
 - MEV feed notionals no longer read ~$0 on real cycles: the arb scanner
   read raw `usd_volume` (NULL for SDEX XLM/token + token/token legs), so
   cycle notionals summed to ~$0. It now estimates each leg's USD value

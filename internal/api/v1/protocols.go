@@ -325,15 +325,20 @@ type ProtocolDetailView struct {
 	// count) across the protocol's contracts over the trailing
 	// ActivityWindowDays — "which event types fired, and how often." All
 	// analytics share this window so the lake queries stay partition-pruned
-	// and fast. Descending by count.
+	// and fast. Descending by count. Includes a synthetic "untyped" bucket
+	// for events whose topic[0] isn't a denormalized Symbol in the lake
+	// (predominantly AMM swap/sync events), so sum(EventBreakdown) reconciles
+	// to EventsTotal.
 	EventBreakdown []ProtocolEventTypeView `json:"event_breakdown,omitempty"`
 	// ActivitySeries is the daily decoded-event count over the trailing
 	// ActivityWindowDays — the protocol's on-chain activity chart.
 	ActivitySeries []ProtocolActivityPointView `json:"activity_series,omitempty"`
 	// ActivityWindowDays is the lookback all the analytics fields cover.
 	ActivityWindowDays int `json:"activity_window_days,omitempty"`
-	// EventsTotal is the decoded contract-event count across every contract
-	// in the protocol over ActivityWindowDays (sum of EventBreakdown counts).
+	// EventsTotal is the contract-event count across every contract in the
+	// protocol over ActivityWindowDays — the unfiltered total (= sum of
+	// ActivitySeries = sum of EventBreakdown incl. the untyped bucket). NOT
+	// the typed-breakdown sum, which excludes non-Symbol-topic'd events.
 	EventsTotal int64 `json:"events_total,omitempty"`
 
 	// Bespoke is the category-specific analytics block (TVL/volume/AUM/…) —
@@ -466,8 +471,11 @@ func (s *Server) enrichProtocolAnalytics(ctx context.Context, meta ProtocolMeta,
 		return
 	}
 	view.ActivityWindowDays = protocolActivityWindowDays
-	s.fillProtocolBreakdown(ctx, meta.Name, ids, since, view)
+	// Series first: it counts ALL contract events over the window, which
+	// is the authoritative EventsTotal. The breakdown then reconciles to
+	// that total via an "(untyped)" remainder bucket (see fillProtocolBreakdown).
 	s.fillProtocolSeries(ctx, meta.Name, ids, since, view)
+	s.fillProtocolBreakdown(ctx, meta.Name, ids, since, view)
 	s.fillProtocolContractActivity(ctx, meta.Name, ids, since, view)
 }
 
@@ -496,21 +504,45 @@ func protocolContractIDs(contracts []ProtocolContractView, factories []string) [
 	return ids
 }
 
-// fillProtocolBreakdown populates EventBreakdown + EventsTotal (degrades on error).
+// fillProtocolBreakdown populates EventBreakdown (degrades on error).
+//
+// The breakdown groups by topic[0]'s denormalized symbol (topic_0_sym),
+// which the lake only populates when topic[0] is a plain Symbol SCVal.
+// Many Soroban DEX events carry a non-Symbol topic[0] — Soroswap's
+// swap/sync events are the dominant case (190k+ over a 90d window with an
+// empty topic_0_sym) — so the typed breakdown alone under-counts the true
+// event total by a wide margin, and is empty entirely for protocols whose
+// every event is non-Symbol-topic'd (the phoenix "empty breakdown but the
+// chart has data" case). To keep the breakdown reconciled with EventsTotal
+// (which fillProtocolSeries sets from the unfiltered count), append a
+// synthetic "untyped" bucket carrying the remainder. EventsTotal must
+// already be set (series is filled first in enrichProtocolAnalytics).
 func (s *Server) fillProtocolBreakdown(ctx context.Context, name string, ids []string, since uint32, view *ProtocolDetailView) {
 	breakdown, err := s.protocolActivity.ProtocolEventBreakdown(ctx, ids, since)
 	if err != nil {
 		s.logger.Warn("protocol event breakdown failed", "source", name, "err", err)
 		return
 	}
-	view.EventBreakdown = make([]ProtocolEventTypeView, 0, len(breakdown))
+	view.EventBreakdown = make([]ProtocolEventTypeView, 0, len(breakdown)+1)
+	var typedSum int64
 	for _, b := range breakdown {
 		view.EventBreakdown = append(view.EventBreakdown, ProtocolEventTypeView{EventType: b.EventType, Count: int64(b.Count)})
-		view.EventsTotal += int64(b.Count)
+		typedSum += int64(b.Count)
+	}
+	// Reconcile to the authoritative total: the gap is events whose
+	// topic[0] symbol the lake didn't denormalize (predominantly AMM
+	// swap/sync events). Surfacing it as a labeled bucket keeps
+	// sum(EventBreakdown) == EventsTotal == sum(ActivitySeries).
+	if untyped := view.EventsTotal - typedSum; untyped > 0 {
+		view.EventBreakdown = append(view.EventBreakdown, ProtocolEventTypeView{EventType: "untyped", Count: untyped})
 	}
 }
 
-// fillProtocolSeries populates the daily ActivitySeries (degrades on error).
+// fillProtocolSeries populates the daily ActivitySeries + EventsTotal
+// (degrades on error). EventsTotal is the unfiltered contract-event count
+// over the window (the sum of the daily points), which is the
+// authoritative total the breakdown reconciles against — NOT the typed
+// breakdown sum, which excludes non-Symbol-topic'd events.
 func (s *Server) fillProtocolSeries(ctx context.Context, name string, ids []string, since uint32, view *ProtocolDetailView) {
 	series, err := s.protocolActivity.ProtocolDailyActivity(ctx, ids, since)
 	if err != nil {
@@ -518,9 +550,12 @@ func (s *Server) fillProtocolSeries(ctx context.Context, name string, ids []stri
 		return
 	}
 	view.ActivitySeries = make([]ProtocolActivityPointView, 0, len(series))
+	var total int64
 	for _, p := range series {
 		view.ActivitySeries = append(view.ActivitySeries, ProtocolActivityPointView{Date: p.Date, Events: int64(p.Events)})
+		total += int64(p.Events)
 	}
+	view.EventsTotal = total
 }
 
 // fillProtocolContractActivity merges per-contract event counts + last-seen onto

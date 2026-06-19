@@ -304,13 +304,17 @@ func TestHandleProtocolDetail_LakeAnalytics(t *testing.T) {
 		}},
 		ProtocolActivity: &stubProtocolActivityReader{
 			tip: 63_000_000,
+			// Typed breakdown (topic_0_sym != '') sums to 700; the daily
+			// series counts ALL contract events (1000). The 300-event gap
+			// is non-Symbol-topic'd events the breakdown should surface as
+			// a reconciling "untyped" bucket.
 			breakdown: []clickhouse.ProtocolEventTypeCount{
-				{EventType: "supply", Count: 900},
+				{EventType: "supply", Count: 600},
 				{EventType: "borrow", Count: 100},
 			},
 			daily: []clickhouse.ProtocolDailyPoint{
-				{Date: "2026-06-13", Events: 40},
-				{Date: "2026-06-14", Events: 60},
+				{Date: "2026-06-13", Events: 400},
+				{Date: "2026-06-14", Events: 600},
 			},
 			contracts: []clickhouse.ProtocolContractActivity{
 				{ContractID: "CPOOL1", Events: 700, LastSeen: time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC)},
@@ -332,13 +336,27 @@ func TestHandleProtocolDetail_LakeAnalytics(t *testing.T) {
 	}
 	d := body.Data
 
-	if len(d.EventBreakdown) != 2 || d.EventBreakdown[0].EventType != "supply" || d.EventBreakdown[0].Count != 900 {
+	// Typed entries first (desc by count), then the reconciling untyped
+	// bucket = EventsTotal(1000) − typedSum(700) = 300.
+	if len(d.EventBreakdown) != 3 || d.EventBreakdown[0].EventType != "supply" || d.EventBreakdown[0].Count != 600 {
 		t.Errorf("event_breakdown = %+v", d.EventBreakdown)
 	}
+	if last := d.EventBreakdown[len(d.EventBreakdown)-1]; last.EventType != "untyped" || last.Count != 300 {
+		t.Errorf("untyped bucket = %+v, want {untyped 300}", last)
+	}
+	// EventsTotal is the unfiltered series sum (not the typed-breakdown sum).
 	if d.EventsTotal != 1000 {
 		t.Errorf("events_total = %d, want 1000", d.EventsTotal)
 	}
-	if len(d.ActivitySeries) != 2 || d.ActivitySeries[1].Events != 60 {
+	// sum(EventBreakdown) must reconcile to EventsTotal.
+	var bdSum int64
+	for _, b := range d.EventBreakdown {
+		bdSum += b.Count
+	}
+	if bdSum != d.EventsTotal {
+		t.Errorf("breakdown sum %d != events_total %d", bdSum, d.EventsTotal)
+	}
+	if len(d.ActivitySeries) != 2 || d.ActivitySeries[1].Events != 600 {
 		t.Errorf("activity_series = %+v", d.ActivitySeries)
 	}
 	if d.ActivityWindowDays != 90 {
