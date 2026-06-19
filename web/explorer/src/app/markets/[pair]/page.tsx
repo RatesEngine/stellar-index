@@ -5,6 +5,7 @@ import { formatCompact } from '@/lib/format';
 import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd } from '@/lib/seo';
 import { Breadcrumbs } from '@/components/ui';
 import { PairChart } from './PairChart';
+import { SourceBreakdown } from './SourceBreakdown';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.stellarindex.io';
@@ -399,6 +400,8 @@ export default async function PairPage({ params }: { params: Params }) {
             />
           </div>
         </Panel>
+
+        <SourceBreakdown base={base} quote={quote} />
 
         <Panel title="Activity" subtitle="last 24h">
           <dl className="grid grid-cols-2 gap-2 text-sm">

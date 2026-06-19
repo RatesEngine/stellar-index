@@ -23,6 +23,7 @@ import {
   TR,
 } from '@/components/ui';
 import { useMarkets, useSources } from '@/api/hooks';
+import { DonutChart } from '@/components/charts/DonutChart';
 import { formatCompact } from '@/lib/format';
 import {
   type Envelope,
@@ -201,6 +202,8 @@ export function NetworkView() {
         <TopMarkets />
         <ActiveSources />
       </div>
+
+      <NetworkComposition />
 
       <DigDeeper />
     </div>
@@ -501,6 +504,54 @@ function ActiveSources() {
           All sources →
         </Link>
       </div>
+    </Panel>
+  );
+}
+
+// NetworkComposition — trailing-24h USD volume split by venue type
+// (CEX / on-chain DEX / aggregator / oracle). Derived from the same
+// /v1/sources?include=stats the directory uses (per-source class +
+// volume), so no dedicated endpoint is needed.
+function venueType(cls: string, subclass?: string): string {
+  if (cls === 'exchange') return subclass === 'dex' ? 'On-chain DEX' : 'Exchange (CEX)';
+  if (cls === 'aggregator') return 'Aggregator';
+  if (cls === 'oracle') return 'Oracle';
+  if (cls === 'authority_sanity') return 'Authority';
+  return cls || 'Other';
+}
+
+function NetworkComposition() {
+  const { data, isLoading, isError } = useSources(undefined, true);
+  const byType = new Map<string, number>();
+  for (const s of data ?? []) {
+    const v = Number(s.volume_24h_usd ?? 0);
+    if (Number.isFinite(v) && v > 0) {
+      const k = venueType(s.class, s.subclass);
+      byType.set(k, (byType.get(k) ?? 0) + v);
+    }
+  }
+  const slices = Array.from(byType, ([label, value]) => ({ label, value }));
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+
+  return (
+    <Panel
+      title="Volume by venue type — 24h"
+      hint="Share of trailing-24h USD volume across source classes — where the network's observed trading happens."
+      source={asExample('/v1/sources', { include: 'stats' })}
+    >
+      {isLoading && <Skeleton className="h-40 w-full" />}
+      {isError && <p className="text-sm text-ink-muted">Composition is unavailable right now.</p>}
+      {!isLoading && !isError && slices.length === 0 && (
+        <EmptyState title="No source volume in the last 24h." />
+      )}
+      {slices.length > 0 && (
+        <DonutChart
+          data={slices}
+          centerLabel={`$${formatCompact(total)}`}
+          centerSub="24h vol"
+          formatValue={(n) => `$${formatCompact(n)}`}
+        />
+      )}
     </Panel>
   );
 }
