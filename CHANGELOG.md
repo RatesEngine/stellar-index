@@ -57,12 +57,16 @@ against.
   global CEX/aggregator price fall back to their Stellar trades-derived
   price (the same one the classic listing shows), so a class-filtered row
   matches the classic asset row instead of listing null.
-- `/v1/assets` listing now fills `market_cap_usd` + `circulating_supply`
-  WHERE the supply pipeline covers the asset (the major assets) instead
-  of leaving every row null — a `supply_1d` lookup keyed to the listing
-  rows, computed `(circulating / 10^decimals) × price`. Assets without
-  supply stay honestly null (no fabrication); coverage grows with the
-  supply pipeline.
+- `/v1/assets` `market_cap_usd` + `circulating_supply` now cover **every
+  classic asset**, not just the ~9 with a precise supply-pipeline figure
+  (audit 2026-06-19 item 4: market_cap was null for all 500). The precise
+  three-domain `supply_1d` figure is still preferred where it exists; the
+  long tail falls back to a broad circulating supply derived from the sum
+  of all (non-removed, positive) trustline balances per asset — the exact
+  definition of classic-asset circulating supply — read from the ClickHouse
+  lake via one cached GROUP BY (~0.5s, 10-min TTL + single-flight, kept off
+  the API hot path). market_cap = `(circulating / 10^decimals) × price`.
+  Assets without a price stay honestly null (no fabrication).
 - `/v1/protocols/{name}` is now served from a 60s per-server single-flight
   cache, so concurrent requests no longer each re-run the ~15s lake scans
   and peg CPU (compounding the 25s ceiling below).

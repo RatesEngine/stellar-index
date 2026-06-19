@@ -99,6 +99,14 @@ type Server struct {
 	protoDetailMu        sync.Mutex
 	protoDetailCache     map[string]protoDetailEntry
 	protoDetailFlight    map[string]chan struct{}
+	// Per-server TTL + single-flight cache for the broad-coverage
+	// classic circulating-supply map (one ~0.5s ClickHouse GROUP BY over
+	// the trustline slice — see cachedClassicSupply). Backs market-cap
+	// fill on the long tail of /v1/assets.
+	classicSupplyMu     sync.Mutex
+	classicSupplyCache  map[string]string
+	classicSupplyAt     time.Time
+	classicSupplyFlight chan struct{}
 	soroswapPairs        SoroswapPairsReader
 	networkStats         NetworkStatsReader
 	marketSources        MarketSourceReader

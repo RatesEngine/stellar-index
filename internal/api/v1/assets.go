@@ -525,22 +525,34 @@ func (s *Server) handleAssetListFromCoins(
 // pipeline expands. Type-asserted so coins readers without the method
 // (test stubs) simply skip — best-effort, never fails the response.
 func (s *Server) fillMarketCapsFromSupply(ctx context.Context, rows []AssetDetail) {
-	sr, ok := s.coins.(interface {
+	// Precise supply — the three-domain pipeline (supply_1d, ~9 assets).
+	// Authoritative (includes claimable + LP-locked holdings); preferred.
+	var precise map[string]string
+	if sr, ok := s.coins.(interface {
 		LatestCirculatingSupply(context.Context) (map[string]string, error)
-	})
-	if !ok {
-		return
+	}); ok {
+		if m, err := sr.LatestCirculatingSupply(ctx); err == nil {
+			precise = m
+		}
 	}
-	supply, err := sr.LatestCirculatingSupply(ctx)
-	if err != nil || len(supply) == 0 {
+	// Broad-coverage fallback — trustline-balance sums for EVERY classic
+	// asset, derived from the ClickHouse lake and cached (audit 2026-06-19
+	// item 4: market_cap was null for all but the ~9 precise-supply assets).
+	// Slightly undercounts (omits claimable + LP), so it only fills rows the
+	// precise pipeline doesn't cover.
+	broad := s.cachedClassicSupply(ctx)
+	if len(precise) == 0 && len(broad) == 0 {
 		return
 	}
 	for i := range rows {
 		if rows[i].MarketCapUSD != nil || rows[i].PriceUSD == nil {
 			continue
 		}
-		circ, has := supply[rows[i].AssetID]
-		if !has {
+		circ := precise[rows[i].AssetID]
+		if circ == "" {
+			circ = broad[rows[i].AssetID]
+		}
+		if circ == "" {
 			continue
 		}
 		if mc := computeMarketCapUSD(circ, *rows[i].PriceUSD, rows[i].Decimals); mc != "" {
@@ -551,6 +563,65 @@ func (s *Server) fillMarketCapsFromSupply(ctx context.Context, rows []AssetDetai
 			}
 		}
 	}
+}
+
+// classicSupplyTTL bounds how long the broad trustline-derived supply map
+// is reused before a refresh. The underlying GROUP BY is ~0.5s and the
+// totals move slowly, so a 10-minute TTL keeps it off the API hot path.
+const classicSupplyTTL = 10 * time.Minute
+
+// cachedClassicSupply returns the broad-coverage classic circulating-supply
+// map (canonical CODE-ISSUER → raw 7dp total) from the explorer reader,
+// cached per-server with a TTL + single-flight. The backing ClickHouse
+// GROUP BY is far too heavy to run per request. Returns nil when no
+// explorer reader exposing the method is wired (test stubs) — callers then
+// degrade to the precise supply set only. Serves the last good map on a
+// refresh error.
+func (s *Server) cachedClassicSupply(ctx context.Context) map[string]string {
+	er, ok := s.explorer.(interface {
+		ClassicCirculatingSupply(context.Context) (map[string]string, error)
+	})
+	if !ok {
+		return nil
+	}
+	s.classicSupplyMu.Lock()
+	if s.classicSupplyCache != nil && time.Since(s.classicSupplyAt) < classicSupplyTTL {
+		m := s.classicSupplyCache
+		s.classicSupplyMu.Unlock()
+		return m
+	}
+	if ch := s.classicSupplyFlight; ch != nil {
+		s.classicSupplyMu.Unlock()
+		select {
+		case <-ch:
+			s.classicSupplyMu.Lock()
+			m := s.classicSupplyCache
+			s.classicSupplyMu.Unlock()
+			return m
+		case <-ctx.Done():
+			return nil
+		}
+	}
+	done := make(chan struct{})
+	s.classicSupplyFlight = done
+	s.classicSupplyMu.Unlock()
+
+	m, err := er.ClassicCirculatingSupply(ctx)
+
+	s.classicSupplyMu.Lock()
+	if err == nil && len(m) > 0 {
+		s.classicSupplyCache = m
+		s.classicSupplyAt = time.Now()
+	} else {
+		m = s.classicSupplyCache // serve last good on error/empty
+	}
+	s.classicSupplyFlight = nil
+	s.classicSupplyMu.Unlock()
+	close(done)
+	if err != nil {
+		s.logger.Warn("classic supply refresh failed", "err", err)
+	}
+	return m
 }
 
 // computeMarketCapUSD = (circulating / 10^decimals) × priceUSD, as a
