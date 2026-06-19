@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.127] — 2026-06-19
+
 ### Added
 
 - **Per-hour `trade_count` on the source sparkline.** `/v1/sources?include=sparkline`
