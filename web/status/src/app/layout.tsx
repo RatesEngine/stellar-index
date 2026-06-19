@@ -1,62 +1,17 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
-import { ConsoleShell } from '@/components/ConsoleShell';
 
-// Inter (UI) + JetBrains Mono (numeric / addresses / code) — loaded exactly
-// like the explorer so the status page renders in the same type system.
-// next/font self-hosts both at build time (no runtime Google dependency, no
-// layout shift) and exposes them as the --font-sans / --font-mono CSS
-// variables the Tailwind theme reads.
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-sans',
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-mono',
-});
-
-const SITE_URL = 'https://status.stellarindex.io';
-const SITE_DESCRIPTION =
-  'Real-time status of the Stellar Index API: per-service health, request latency, ingest freshness, active incidents.';
-
+// The status page MOVED onto the main site at https://stellarindex.io/status
+// (one site, unified nav). This project (Cloudflare Pages
+// `stellarindex-status`, still bound to status.stellarindex.io) is now
+// REDIRECT-ONLY: public/_redirects 301s every path to the new location.
+// This minimal layout + page is only the build artifact the redirect
+// rides on; it's shadowed by the edge redirect and rarely rendered.
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: 'Stellar Index — system status',
-  description: SITE_DESCRIPTION,
-  robots: { index: true, follow: true },
-  // Self-canonical for the status home — without it search engines may
-  // treat the trailing-slash / no-slash / index.html variants as
-  // separate pages.
-  alternates: { canonical: '/' },
-  openGraph: {
-    type: 'website',
-    siteName: 'Stellar Index — status',
-    title: 'Stellar Index — system status',
-    description: SITE_DESCRIPTION,
-    url: SITE_URL,
-    locale: 'en_US',
-    // PNG, not SVG: Twitter/X, Facebook, LinkedIn, Slack, iMessage all
-    // reject SVG og:images (no raster → no link-preview thumbnail).
-    images: [
-      {
-        url: '/og.png',
-        width: 1200,
-        height: 630,
-        alt: 'Stellar Index — system status',
-        type: 'image/png',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Stellar Index — system status',
-    description: SITE_DESCRIPTION,
-    images: ['/og.png'],
-  },
+  title: 'Status moved — stellarindex.io/status',
+  description: 'The Stellar Index status page now lives at stellarindex.io/status.',
+  robots: { index: false, follow: true },
+  alternates: { canonical: 'https://stellarindex.io/status' },
 };
 
 export default function RootLayout({
@@ -65,10 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen bg-surface-canvas">
-        <ConsoleShell>{children}</ConsoleShell>
-      </body>
+    <html lang="en">
+      <body className="min-h-screen bg-surface-canvas">{children}</body>
     </html>
   );
 }
