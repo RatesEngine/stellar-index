@@ -319,7 +319,15 @@ func (s *Server) handleProtocolDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
+	// Hard ceiling on the lake-derived analytics + bespoke scans. They
+	// run ~15s warm but were observed ballooning to MINUTES under
+	// concurrent load (2026-06-19 incident), pegging CPU because nothing
+	// cancelled the runaway. 25s is generous for the normal path yet
+	// caps the runaway; the enrich* helpers degrade gracefully when the
+	// context is cancelled. (The real fix — a CAGG so these are fast —
+	// is tracked in docs/archive/page-audit-2026-06-19/REMAINING.md.)
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
 	contracts := s.protocolContracts(ctx, meta.Name)
 	classifyContractKinds(contracts, meta.Factories)
 	view := ProtocolDetailView{

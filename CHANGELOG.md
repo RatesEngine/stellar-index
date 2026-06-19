@@ -45,6 +45,12 @@ against.
   — far more detail per window.
 
 ### Fixed
+- `/v1/protocols/{name}` can no longer peg CPU for minutes: the
+  lake-analytics + bespoke scans (~15s warm) had no request ceiling and
+  were observed running away to several minutes under concurrent load
+  (2026-06-19 incident). Added a 25s timeout; the enrichment helpers
+  degrade gracefully on cancellation. (The proper fix — a CAGG so these
+  are fast — is tracked in docs/archive/page-audit-2026-06-19/.)
 - MEV feed notionals no longer read ~$0 on real cycles: the arb scanner
   read raw `usd_volume` (NULL for SDEX XLM/token + token/token legs), so
   cycle notionals summed to ~$0. It now estimates each leg's USD value
