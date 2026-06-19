@@ -5984,8 +5984,9 @@ components:
         backfill_available: { type: boolean, description: "Whether the source supports historical backfill via its native API." }
         backfill_safe:      { type: boolean, description: "Whether `stellarindex-ops backfill` will run on this source. On-chain Soroban sources start `false` and only flip `true` after a per-WASM-hash audit (`docs/operations/wasm-audits/`); off-chain CEX/FX sources are always `true`." }
         default_weight:     { type: integer, description: "Default per-source weight for weighted-aggregation paths (when those land)." }
+        on_chain:           { type: boolean, description: "Whether the source observes the Stellar network directly (dispatcher-path ingest) rather than reading an off-chain vendor API. `false` for CEX / FX / aggregators / Chainlink (an Ethereum oracle). The explorer's Stellar-network surfaces filter on this." }
         trade_count_24h:    { type: integer, description: "Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise." }
-      required: [name, class, include_in_vwap, paid, backfill_available, backfill_safe, default_weight]
+      required: [name, class, include_in_vwap, paid, backfill_available, backfill_safe, default_weight, on_chain]
 
     Methodology:
       type: object

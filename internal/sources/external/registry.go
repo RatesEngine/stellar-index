@@ -168,6 +168,39 @@ func IsFXSource(source string) bool {
 	return Lookup(source).Subclass == SubclassFX
 }
 
+// IsOnChain reports whether a source observes the Stellar network
+// directly (dispatcher-path on-chain ingest) rather than reading an
+// off-chain vendor API. On-chain: the DEX venues (sdex + the Soroban
+// DEXes), the Soroban oracles (reflector-*, band, redstone), lending
+// (blend), routers (defindex, soroswap-router), and bridges (cctp,
+// rozo). Off-chain: CEX + FX venues, aggregators, sovereign FX
+// anchors, and Chainlink — an Ethereum-mainnet oracle read over
+// JSON-RPC, the one ClassOracle source that is NOT on Stellar.
+//
+// The explorer's Stellar-network surfaces (the /network page, the
+// /sources directory) filter on this so reference-pricing feeds don't
+// masquerade as Stellar on-chain activity. Unknown sources fall
+// through to the on-chain branch — but the registry is closed (every
+// source is listed above), so that only matters for tests/typos.
+func IsOnChain(source string) bool {
+	m := Lookup(source)
+	switch m.Subclass {
+	case SubclassCEX, SubclassFX:
+		return false
+	}
+	switch m.Class {
+	case ClassAggregator, ClassAuthoritySanity:
+		return false
+	}
+	// Chainlink is on Ethereum mainnet, read via JSON-RPC against
+	// AggregatorV3 contracts — see its registry entry. It is the lone
+	// off-chain ClassOracle, so it can't be separated by class alone.
+	if source == "chainlink" {
+		return false
+	}
+	return true
+}
+
 // AggregatorSources returns every registered source whose Class is
 // ClassAggregator, in deterministic lexicographic order. Powers the
 // `aggregator_avg` tier of the global-price fallback chain (R-018

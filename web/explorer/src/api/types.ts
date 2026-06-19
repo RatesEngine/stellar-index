@@ -8007,6 +8007,8 @@ export interface components {
             backfill_safe: boolean;
             /** @description Default per-source weight for weighted-aggregation paths (when those land). */
             default_weight: number;
+            /** @description Whether the source observes the Stellar network directly (dispatcher-path ingest) rather than reading an off-chain vendor API. `false` for CEX / FX / aggregators / Chainlink (an Ethereum oracle). The explorer's Stellar-network surfaces filter on this. */
+            on_chain: boolean;
             /** @description Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise. */
             trade_count_24h?: number;
         };

@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { SourcesTable } from './SourcesTable';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/sources' },
-  title: 'Sources — every venue we ingest',
+  title: 'Stellar sources — every on-chain venue we index',
   description:
-    'Live source registry, grouped by class (exchange / aggregator / oracle / authority sanity). Only Class=exchange contributes to VWAP by default.',
+    'Live registry of the Stellar on-chain sources we index, grouped by class (DEX / oracle / lending / router / bridge). Only DEX-class contributes to VWAP by default.',
 };
 
 /**
@@ -23,12 +24,17 @@ export default function SourcesPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Sources</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Stellar sources</h1>
         <p className="max-w-3xl text-sm text-ink-body">
-          Every venue we ingest, grouped by class. Only Class=exchange sources
-          contribute to VWAP by default — aggregators and oracles are reported
-          alongside but excluded so we don&apos;t double-count upstream markets
-          or import their methodology.
+          Every Stellar on-chain venue we index, grouped by class. Only DEX
+          venues contribute to VWAP by default — on-chain oracles, lending,
+          routers and bridges are reported alongside but excluded so we
+          don&apos;t import their methodology. Off-chain reference feeds (CEX,
+          aggregators, FX) that back the pricing layer live under{' '}
+          <Link href="/exchanges" className="text-brand-600 hover:underline">
+            exchanges
+          </Link>
+          .
         </p>
       </header>
 

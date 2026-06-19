@@ -22,7 +22,7 @@ import {
   THead,
   TR,
 } from '@/components/ui';
-import { useMarkets, useSources } from '@/api/hooks';
+import { usePools, useSources, isOnChainSource } from '@/api/hooks';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { formatCompact } from '@/lib/format';
 import {
@@ -220,9 +220,14 @@ function HeroStats({ stats: s, tip }: { stats?: NetworkStats; tip?: Ledger }) {
   // Matches the home strip. (The "Volume by venue type" donut below
   // still shows the full CEX-vs-on-chain split by design.)
   const { data: sources } = useSources(undefined, true);
-  const stellarVolume = (sources ?? [])
+  const onChain = (sources ?? []).filter(isOnChainSource);
+  const stellarVolume = onChain
     .filter((x) => x.subclass === 'dex')
     .reduce((sum, x) => sum + (x.volume_24h_usd ? Number(x.volume_24h_usd) : 0), 0);
+  // Stellar markets = active (venue, pair) pools summed across on-chain
+  // DEX venues (a pair traded on two DEXes counts as two markets).
+  const stellarMarkets = onChain.reduce((sum, x) => sum + (x.markets_count_24h ?? 0), 0);
+  const stellarSources = onChain.length;
   return (
     <StatGrid cols={4}>
       <StatCell>
@@ -240,7 +245,11 @@ function HeroStats({ stats: s, tip }: { stats?: NetworkStats; tip?: Ledger }) {
         />
       </StatCell>
       <StatCell>
-        <Stat label="Markets (24h)" value={s ? formatCompact(s.markets_count_24h) : '—'} />
+        <Stat
+          label="Stellar markets (24h)"
+          value={stellarMarkets > 0 ? formatCompact(stellarMarkets) : '—'}
+          sub="across DEX venues"
+        />
       </StatCell>
       <StatCell>
         <Stat label="Assets indexed" value={s ? formatCompact(s.assets_indexed) : '—'} />
@@ -261,9 +270,9 @@ function HeroStats({ stats: s, tip }: { stats?: NetworkStats; tip?: Ledger }) {
       </StatCell>
       <StatCell>
         <Stat
-          label="Sources"
-          value={s ? `${s.exchange_sources}/${s.total_sources}` : '—'}
-          sub="exchange / total"
+          label="Stellar sources"
+          value={stellarSources > 0 ? String(stellarSources) : '—'}
+          sub="on-chain venues"
         />
       </StatCell>
       <StatCell>
@@ -398,20 +407,24 @@ function LatestLedgers({
   );
 }
 
-// TopMarkets — top pairs by trailing-24h USD volume.
+// TopMarkets — top Stellar on-chain pools by trailing-24h USD volume.
+// Sourced from /v1/pools (DEX-subclass only, server-side scoped), NOT
+// /v1/markets — the latter aggregates across off-chain CEX reference
+// feeds (BTC/USDT etc.) that aren't Stellar markets at all.
 function TopMarkets() {
-  const { data, isLoading, isError } = useMarkets(10, 'volume_24h_usd_desc');
-  const rows = (data?.markets ?? []).slice(0, 8);
+  const { data, isLoading, isError } = usePools(8, 'volume_24h_usd_desc');
+  const rows = (data ?? []).slice(0, 8);
   return (
     <Panel
-      title="Top markets"
-      source={asExample('/v1/markets', { limit: 10, order_by: 'volume_24h_usd_desc' })}
+      title="Top Stellar markets"
+      hint="On-chain DEX pools by trailing-24h volume — SDEX + Soroban DEXes only."
+      source={asExample('/v1/pools', { limit: 8, order_by: 'volume_24h_usd_desc' })}
       bodyClassName="-mx-4 -mb-4"
     >
       {isLoading && <div className="px-4 pb-4"><Skeleton className="h-40 w-full" /></div>}
       {isError && <p className="px-4 pb-4 text-sm text-ink-muted">Markets are unavailable right now.</p>}
       {!isLoading && !isError && rows.length === 0 && (
-        <div className="px-4 pb-4"><EmptyState title="No markets returned." /></div>
+        <div className="px-4 pb-4"><EmptyState title="No Stellar markets returned." /></div>
       )}
       {rows.length > 0 && (
         <TableWrap className="rounded-none border-0">
@@ -419,7 +432,7 @@ function TopMarkets() {
             <THead>
               <TR className="hover:bg-transparent">
                 <Th>Pair</Th>
-                <Th align="right">Last price</Th>
+                <Th>Venue</Th>
                 <Th align="right">24h volume</Th>
               </TR>
             </THead>
@@ -427,7 +440,7 @@ function TopMarkets() {
               {rows.map((m) => {
                 const slug = `${m.base}~${m.quote}`;
                 return (
-                  <TR key={slug}>
+                  <TR key={`${m.source}:${slug}`}>
                     <Td>
                       <Link
                         href={`/markets/${encodeURIComponent(slug)}`}
@@ -438,8 +451,13 @@ function TopMarkets() {
                         {shortAsset(m.quote)}
                       </Link>
                     </Td>
-                    <Td align="right" className="font-mono text-ink-body">
-                      {m.last_price ? formatLastPrice(m.last_price) : '—'}
+                    <Td>
+                      <Link
+                        href={`/dexes/${encodeURIComponent(m.source)}`}
+                        className="text-ink-muted hover:text-brand-600"
+                      >
+                        {m.source}
+                      </Link>
                     </Td>
                     <Td align="right" className="font-mono">
                       {m.volume_24h_usd ? `$${formatCompact(Number(m.volume_24h_usd))}` : '—'}
@@ -452,24 +470,28 @@ function TopMarkets() {
         </TableWrap>
       )}
       <div className="px-4 pt-3 text-xs">
-        <Link href="/markets" className="text-brand-600 hover:underline">
-          All markets →
+        <Link href="/dexes" className="text-brand-600 hover:underline">
+          All DEX pools →
         </Link>
       </div>
     </Panel>
   );
 }
 
-// ActiveSources — price sources ranked by trailing-24h USD volume,
-// the live feeds behind every aggregated rate.
+// ActiveSources — Stellar on-chain sources ranked by trailing-24h USD
+// volume. Off-chain reference feeds (CEX / FX / aggregators) are
+// excluded — they dominate raw volume but aren't Stellar activity;
+// see /exchanges for those.
 function ActiveSources() {
   const { data, isLoading, isError } = useSources(undefined, true);
   const rows = [...(data ?? [])]
+    .filter(isOnChainSource)
     .sort((a, b) => Number(b.volume_24h_usd ?? 0) - Number(a.volume_24h_usd ?? 0))
     .slice(0, 8);
   return (
     <Panel
-      title="Most active sources"
+      title="Most active Stellar sources"
+      hint="On-chain venues only — CEX / aggregator / FX feeds live on /exchanges."
       source={asExample('/v1/sources', { include: 'stats' })}
       bodyClassName="-mx-4 -mb-4"
     >
@@ -518,41 +540,31 @@ function ActiveSources() {
   );
 }
 
-// NetworkComposition — trailing-24h USD volume split by venue type
-// (CEX / on-chain DEX / aggregator / oracle). Derived from the same
-// /v1/sources?include=stats the directory uses (per-source class +
-// volume), so no dedicated endpoint is needed.
-function venueType(cls: string, subclass?: string): string {
-  if (cls === 'exchange') return subclass === 'dex' ? 'On-chain DEX' : 'Exchange (CEX)';
-  if (cls === 'aggregator') return 'Aggregator';
-  if (cls === 'oracle') return 'Oracle';
-  if (cls === 'authority_sanity') return 'Authority';
-  return cls || 'Other';
-}
-
+// NetworkComposition — trailing-24h on-chain USD volume split by
+// Stellar venue (sdex / aquarius / phoenix / soroswap / comet).
+// Off-chain feeds are excluded (this is the Stellar page); with CEX
+// gone the old venue-TYPE split collapses to a single "On-chain DEX"
+// slice, so we break down by venue NAME instead — the useful cut.
+// Derived from the same /v1/sources?include=stats the directory uses.
 function NetworkComposition() {
   const { data, isLoading, isError } = useSources(undefined, true);
-  const byType = new Map<string, number>();
-  for (const s of data ?? []) {
-    const v = Number(s.volume_24h_usd ?? 0);
-    if (Number.isFinite(v) && v > 0) {
-      const k = venueType(s.class, s.subclass);
-      byType.set(k, (byType.get(k) ?? 0) + v);
-    }
-  }
-  const slices = Array.from(byType, ([label, value]) => ({ label, value }));
+  const slices = (data ?? [])
+    .filter(isOnChainSource)
+    .map((s) => ({ label: s.name, value: Number(s.volume_24h_usd ?? 0) }))
+    .filter((x) => Number.isFinite(x.value) && x.value > 0)
+    .sort((a, b) => b.value - a.value);
   const total = slices.reduce((sum, s) => sum + s.value, 0);
 
   return (
     <Panel
-      title="Volume by venue type — 24h"
-      hint="Share of trailing-24h USD volume across source classes — where the network's observed trading happens."
+      title="Volume by Stellar venue — 24h"
+      hint="Share of trailing-24h on-chain USD volume across Stellar DEX venues."
       source={asExample('/v1/sources', { include: 'stats' })}
     >
       {isLoading && <Skeleton className="h-40 w-full" />}
       {isError && <p className="text-sm text-ink-muted">Composition is unavailable right now.</p>}
       {!isLoading && !isError && slices.length === 0 && (
-        <EmptyState title="No source volume in the last 24h." />
+        <EmptyState title="No on-chain volume in the last 24h." />
       )}
       {slices.length > 0 && (
         <DonutChart
@@ -610,12 +622,6 @@ function xlmCompact(stroops: string): string {
   const t = stroops.trim();
   if (!/^-?\d+$/.test(t)) return stroopsToXlm(stroops);
   return formatCompact(Number(BigInt(t) / 10_000_000n));
-}
-
-function formatLastPrice(raw: string): string {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return '—';
-  return n >= 1000 ? n.toFixed(2) : n >= 1 ? n.toFixed(4) : n >= 0.0001 ? n.toFixed(6) : n.toExponential(3);
 }
 
 function shortAsset(canonical: string | undefined | null): string {

@@ -7,7 +7,7 @@ import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
 import { SourceSparkline } from '@/components/SourceSparkline';
 import { DonutChart } from '@/components/charts/DonutChart';
-import { useSources, useCursors, type Source } from '@/api/hooks';
+import { useSources, useCursors, isOnChainSource, type Source } from '@/api/hooks';
 
 /**
  * Live sources directory backed by `/v1/sources`.
@@ -28,22 +28,28 @@ export function SourcesTable() {
   const cursors = useCursors();
   const [filter, setFilter] = useState('');
 
+  // Stellar-only directory: keep on-chain venues (DEX, on-chain oracles,
+  // lending, routers, bridges); drop off-chain reference feeds (CEX /
+  // FX / aggregators / Chainlink) — those are the pricing layer, not
+  // Stellar network activity, and live on /exchanges + /aggregators.
+  const stellar = useMemo(() => (data ?? []).filter(isOnChainSource), [data]);
+
   const filteredData = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return data ?? [];
-    return (data ?? []).filter((s) => {
+    if (!q) return stellar;
+    return stellar.filter((s) => {
       const hay = `${s.name} ${s.class} ${s.subclass ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [data, filter]);
+  }, [stellar, filter]);
 
   const grouped = useMemo(() => groupByClass(filteredData), [filteredData]);
 
   const classMix = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of data ?? []) m.set(s.class, (m.get(s.class) ?? 0) + 1);
+    for (const s of stellar) m.set(s.class, (m.get(s.class) ?? 0) + 1);
     return Array.from(m, ([label, value]) => ({ label: titleCase(label), value }));
-  }, [data]);
+  }, [stellar]);
 
   // Aggregate the cursors slice by source — one source can have
   // many cursors (live + per-range backfills). We surface the most
@@ -87,14 +93,14 @@ export function SourcesTable() {
       </Panel>
     );
   }
-  if (data.length === 0) {
+  if (stellar.length === 0) {
     return (
       <Panel
         title="Sources"
         source={asExample('/v1/sources')}
         bodyClassName="text-sm text-ink-muted"
       >
-        No sources registered.
+        No Stellar on-chain sources registered.
       </Panel>
     );
   }
@@ -111,7 +117,7 @@ export function SourcesTable() {
           className="w-72 rounded-md border border-line bg-surface px-2.5 py-1 text-xs placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <span className="font-mono text-[11px] text-ink-muted">
-          {filteredData.length} of {data.length} sources
+          {filteredData.length} of {stellar.length} sources
           {filter && (
             <button
               type="button"
@@ -126,10 +132,10 @@ export function SourcesTable() {
       {!filter && classMix.length > 1 && (
         <Panel
           title="By class"
-          hint="Source registry composition — only exchange-class contributes to VWAP"
+          hint="Stellar on-chain source composition — only exchange-class (DEX) contributes to VWAP"
           source={asExample('/v1/sources')}
         >
-          <DonutChart data={classMix} centerLabel={String(data.length)} centerSub="sources" />
+          <DonutChart data={classMix} centerLabel={String(stellar.length)} centerSub="sources" />
         </Panel>
       )}
       {filter && grouped.length === 0 && (
@@ -327,10 +333,18 @@ function Td({
 }
 
 function groupByClass(rows: Source[]): { klass: Source['class']; rows: Source[] }[] {
+  // Includes the on-chain non-exchange classes (lending / router /
+  // bridge) — without them, blend / cctp / rozo / defindex /
+  // soroswap-router fell into the map but were never emitted. The
+  // off-chain classes (aggregator / authority_sanity) stay in the
+  // order for resilience but are filtered out upstream now.
   const order: Source['class'][] = [
     'exchange',
-    'aggregator',
     'oracle',
+    'lending',
+    'router',
+    'bridge',
+    'aggregator',
     'authority_sanity',
   ];
   const map = new Map<Source['class'], Source[]>();
@@ -366,11 +380,17 @@ function titleCase(s: string): string {
 function classHint(k: Source['class']): string {
   switch (k) {
     case 'exchange':
-      return 'Contributes to VWAP by default';
+      return 'On-chain DEX venues — contribute to VWAP by default';
+    case 'oracle':
+      return 'On-chain price feeds (Reflector / Band / Redstone) — reported alongside, excluded from VWAP';
+    case 'lending':
+      return 'On-chain lending — auction stress-prices reported alongside, excluded from VWAP';
+    case 'router':
+      return 'On-chain DEX routers + aggregator vaults — per-tx attribution, excluded from VWAP';
+    case 'bridge':
+      return 'Cross-chain bridges — flow coverage (no prices), excluded from VWAP';
     case 'aggregator':
       return 'Reported alongside; excluded from VWAP to avoid double-counting upstream markets';
-    case 'oracle':
-      return 'Reported alongside; excluded from VWAP to avoid importing their methodology';
     case 'authority_sanity':
       return 'Authority sanity check — divergence reference, never priced into VWAP';
   }

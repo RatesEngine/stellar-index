@@ -25,6 +25,37 @@ func TestRegistry_KnownSourcesClassified(t *testing.T) {
 	}
 }
 
+// TestIsOnChain_Partition pins the on-chain/off-chain split that the
+// explorer's Stellar-network surfaces filter on. It enumerates EVERY
+// registered source, so adding a new one without classifying it here
+// fails the test — forcing a conscious decision rather than silently
+// landing a reference feed on the /network page.
+func TestIsOnChain_Partition(t *testing.T) {
+	offChain := map[string]bool{
+		// CEX
+		"binance": true, "kraken": true, "bitstamp": true, "coinbase": true,
+		// FX
+		"polygon-forex": true, "exchangeratesapi": true,
+		// aggregators
+		"coingecko": true, "coinmarketcap": true, "cryptocompare": true,
+		// sovereign anchor
+		"ecb": true,
+		// Ethereum oracle (JSON-RPC), not Stellar
+		"chainlink": true,
+	}
+	for name := range Registry {
+		got := IsOnChain(name)
+		want := !offChain[name]
+		if got != want {
+			t.Errorf("IsOnChain(%q) = %v, want %v — classify it in this test (and confirm the registry section it sits under)", name, got, want)
+		}
+	}
+	// Unknown sources fall through to on-chain (registry is closed).
+	if !IsOnChain("does-not-exist") {
+		t.Error("IsOnChain(unknown) should default true (closed registry)")
+	}
+}
+
 func TestRegistry_ClassPolicy(t *testing.T) {
 	// Invariant: only ClassExchange may have IncludeInVWAP=true.
 	// Every other class (aggregator, oracle, authority_sanity,

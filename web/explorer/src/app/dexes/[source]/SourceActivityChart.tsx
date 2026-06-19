@@ -35,7 +35,9 @@ export function SourceActivityChart({
   height?: number;
 }) {
   const has7d = (buckets7d?.length ?? 0) > 0;
-  const [tf, setTf] = useState<TF>('24h');
+  // Default to the wider 7d view when it's available (it carries more
+  // signal than a single day); fall back to 24h when 7d wasn't fetched.
+  const [tf, setTf] = useState<TF>(has7d ? '7d' : '24h');
   const active = tf === '7d' && has7d ? buckets7d! : buckets24h;
 
   const data = active.map((b) => ({

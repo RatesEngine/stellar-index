@@ -270,13 +270,27 @@ export function useChangeSummary(
 
 export type Source = {
   name: string;
-  class: 'exchange' | 'aggregator' | 'oracle' | 'authority_sanity';
+  class:
+    | 'exchange'
+    | 'aggregator'
+    | 'oracle'
+    | 'authority_sanity'
+    | 'lending'
+    | 'router'
+    | 'bridge';
   subclass?: string;
   include_in_vwap: boolean;
   paid: boolean;
   backfill_available: boolean;
   backfill_safe: boolean;
   default_weight: number;
+  // True when the source observes the Stellar network directly
+  // (on-chain ingest) rather than reading an off-chain vendor API.
+  // false for CEX / FX / aggregators / Chainlink. The Stellar-network
+  // surfaces (/network, /sources) filter on this. Use isOnChainSource
+  // rather than reading the field raw so older API builds (no field →
+  // undefined) degrade to "show it" instead of hiding every source.
+  on_chain?: boolean;
   // Populated only when the caller passes `includeStats`. 0 means
   // "no trades observed in 24h" — the API doesn't distinguish that
   // from "stats not requested" because both end up zero on the
@@ -291,6 +305,20 @@ export type Source = {
 };
 
 type SourcesEnvelope = { data: Source[] };
+
+/**
+ * isOnChainSource — true when a source observes the Stellar network
+ * directly (vs an off-chain CEX / FX / aggregator / Chainlink feed).
+ * Mirrors the backend `external.IsOnChain`. The explorer's
+ * Stellar-network surfaces (/network, /sources) filter on this.
+ *
+ * Fails OPEN: if `on_chain` is missing (an older API build), we treat
+ * the source as on-chain so the page degrades to "shows everything"
+ * rather than "shows nothing". A correct, current API always sends it.
+ */
+export function isOnChainSource(s: Source): boolean {
+  return s.on_chain !== false;
+}
 
 /**
  * useSources — fetches the source registry.
@@ -683,6 +711,43 @@ export function useMarkets(
       });
       if (Array.isArray(env)) return { markets: env };
       return { markets: env.data, nextCursor: env.pagination?.next };
+    },
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export type Pool = {
+  source: string;
+  base: string;
+  quote: string;
+  last_trade_at: string;
+  trade_count_24h: number;
+  volume_24h_usd?: string | null;
+  last_price?: string | null;
+};
+
+type PoolsEnvelope = { data: Pool[]; pagination?: { next?: string } };
+
+/**
+ * usePools — fetches Stellar on-chain DEX pools from `/v1/pools`.
+ * Unlike `/v1/markets` (which aggregates across ALL sources including
+ * off-chain CEX reference feeds), `/v1/pools` is hard-scoped to the
+ * DEX-subclass sources server-side — so this is the canonical
+ * "Stellar markets" feed. One row per (source, base, quote).
+ */
+export function usePools(
+  limit = 100,
+  orderBy: 'pair' | 'volume_24h_usd_desc' = 'volume_24h_usd_desc',
+) {
+  return useQuery<Pool[]>({
+    queryKey: ['/v1/pools', limit, orderBy],
+    queryFn: async () => {
+      const env = await apiGet<PoolsEnvelope | Pool[]>('/v1/pools', {
+        limit,
+        order_by: orderBy,
+      });
+      return Array.isArray(env) ? env : env.data;
     },
     staleTime: 60_000,
     placeholderData: (prev) => prev,

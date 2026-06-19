@@ -24,6 +24,31 @@ against.
   toggle on `/dexes/{source}` + `/exchanges/{source}` is now live, and
   the 24h sparkline is faster too. `/v1/sources?include=sparkline7d` is
   now surfaced by the frontend.
+- `on_chain` boolean on `/v1/sources` (and `external.IsOnChain`) — true
+  for sources that observe the Stellar network directly (DEX, on-chain
+  oracles, lending, routers, bridges), false for off-chain reference
+  feeds (CEX / FX / aggregators / Chainlink).
+
+### Changed
+- The `/network` page is now Stellar-only: "Top markets" reads
+  `/v1/pools` (on-chain DEX pools, not the CEX-dominated `/v1/markets`),
+  "Most active sources" + the venue-composition donut + the hero
+  Markets/Sources tiles all filter to on-chain sources. Off-chain
+  reference feeds stay on `/exchanges` + `/aggregators`.
+- The `/sources` directory is now the Stellar on-chain source registry
+  (DEX / oracle / lending / router / bridge) — previously it listed
+  every venue *and* silently dropped the lending/router/bridge classes
+  (blend, cctp, rozo, defindex, soroswap-router now appear).
+- Source activity chart defaults to the 7d window when available.
+- Market/asset OHLC chart now picks the finest granularity each window
+  allows under the API's 1000-bar cap (24h→5m, 7d→15m, 30d→1h, 90d→4h)
+  — far more detail per window.
+
+### Fixed
+- Source activity chart no longer shows a gap for the current hour:
+  `source_volume_1h` now uses real-time aggregation (migration 0069),
+  so the in-progress (not-yet-materialized) hour is computed live
+  instead of reading as zero until the hour closed.
 
 ## [v0.5.0-rc.128] — 2026-06-19
 

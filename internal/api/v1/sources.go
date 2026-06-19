@@ -97,6 +97,13 @@ type Source struct {
 	// are always `true` — no on-chain WASM dependency.
 	BackfillSafe  bool `json:"backfill_safe"`
 	DefaultWeight int  `json:"default_weight"`
+	// OnChain is true when the source observes the Stellar network
+	// directly (dispatcher-path ingest) rather than reading an
+	// off-chain vendor API. See external.IsOnChain — the explorer's
+	// Stellar-network surfaces filter on this so reference-pricing
+	// feeds (CEX / FX / aggregators / Chainlink) don't appear as
+	// Stellar on-chain activity.
+	OnChain bool `json:"on_chain"`
 	// Stats columns — populated only when `?include=stats` is set.
 	// 0 / "" when the source had no trades in 24h.
 	TradeCount24h   int64  `json:"trade_count_24h,omitempty"`
@@ -247,6 +254,7 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 			BackfillAvailable: md.BackfillAvailable,
 			BackfillSafe:      md.BackfillSafe,
 			DefaultWeight:     md.DefaultWeight,
+			OnChain:           external.IsOnChain(name),
 			TradeCount24h:     st.trades,
 			VolumeUSD24h:      st.volume,
 			MarketsCount24h:   st.markets,

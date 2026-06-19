@@ -40,7 +40,7 @@ export function ChartPanel({ assetID }: { assetID: string }) {
     <Panel
       title="Price chart"
       hint="OHLC + volume"
-      source={asExample('/v1/ohlc', { base: assetID, quote, interval: '1h', limit: 168 })}
+      source={asExample('/v1/ohlc', { base: assetID, quote, interval: '15m', limit: 672 })}
       bodyClassName="space-y-3"
     >
       {quoteOptions.length > 1 && (

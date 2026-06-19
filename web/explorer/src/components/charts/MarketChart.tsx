@@ -12,17 +12,20 @@ const CandleChart = dynamic(
   { ssr: false, loading: () => <div className="h-[360px]" /> },
 );
 
-// One timeframe control that also picks a sensible candle granularity +
+// One timeframe control that also picks the candle granularity +
 // window (the exchange-standard UX — users pick "how far back", not the
-// bar size). Each maps to a /v1/ohlc (interval, limit).
+// bar size). Each maps to a /v1/ohlc (interval, limit). We pick the
+// FINEST interval that still covers the whole window within the API's
+// 1000-bar/request cap — so each window shows the most detail we can
+// serve (e.g. 24h is 5-minute candles, not 15m; 90d is 4h, not daily).
 type TF = '24h' | '7d' | '30d' | '90d' | '1y' | 'all';
 const TIMEFRAMES: { key: TF; label: string; interval: string; limit: number }[] = [
-  { key: '24h', label: '24h', interval: '15m', limit: 96 },
-  { key: '7d', label: '7d', interval: '1h', limit: 168 },
-  { key: '30d', label: '30d', interval: '4h', limit: 180 },
-  { key: '90d', label: '90d', interval: '1d', limit: 90 },
-  { key: '1y', label: '1y', interval: '1d', limit: 365 },
-  { key: 'all', label: 'All', interval: '1w', limit: 520 },
+  { key: '24h', label: '24h', interval: '5m', limit: 288 }, // 24h × 12
+  { key: '7d', label: '7d', interval: '15m', limit: 672 }, //  7d × 96
+  { key: '30d', label: '30d', interval: '1h', limit: 720 }, // 30d × 24
+  { key: '90d', label: '90d', interval: '4h', limit: 540 }, // 90d × 6
+  { key: '1y', label: '1y', interval: '1d', limit: 365 }, //  finest ≤1000 bars for a year
+  { key: 'all', label: 'All', interval: '1w', limit: 600 }, // full history (daily would blow the cap)
 ];
 
 interface OHLCBar {
