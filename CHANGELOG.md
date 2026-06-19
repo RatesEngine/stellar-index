@@ -80,6 +80,13 @@ against.
   lake via one cached GROUP BY (~0.5s, 10-min TTL + single-flight, kept off
   the API hot path). market_cap = `(circulating / 10^decimals) × price`.
   Assets without a price stay honestly null (no fabrication).
+- `/v1/protocols/{name}` cold-path latency cut ~3× (audit 2026-06-19 item 8):
+  the three independent lake reads (daily series, event breakdown,
+  per-contract activity — ~5s each via the contract_id bloom index) ran
+  serially (~15s total); they now run concurrently and write disjoint view
+  fields, so the cold path is ~5s — comfortably under the 25s ceiling. The
+  "untyped" reconciling bucket is appended after the barrier (it needs the
+  series total). Repeat hits stay instant via the cache below.
 - `/v1/protocols/{name}` is now served from a 60s per-server single-flight
   cache, so concurrent requests no longer each re-run the ~15s lake scans
   and peg CPU (compounding the 25s ceiling below).

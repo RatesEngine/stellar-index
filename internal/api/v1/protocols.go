@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/StellarIndex/stellar-index/internal/storage/clickhouse"
@@ -471,12 +472,36 @@ func (s *Server) enrichProtocolAnalytics(ctx context.Context, meta ProtocolMeta,
 		return
 	}
 	view.ActivityWindowDays = protocolActivityWindowDays
-	// Series first: it counts ALL contract events over the window, which
-	// is the authoritative EventsTotal. The breakdown then reconciles to
-	// that total via an "(untyped)" remainder bucket (see fillProtocolBreakdown).
-	s.fillProtocolSeries(ctx, meta.Name, ids, since, view)
-	s.fillProtocolBreakdown(ctx, meta.Name, ids, since, view)
-	s.fillProtocolContractActivity(ctx, meta.Name, ids, since, view)
+	// The three lake reads are independent (~5s each on a cold cache) and
+	// write disjoint fields of the view (ActivitySeries+EventsTotal /
+	// EventBreakdown / Contracts[].Events), so run them concurrently rather
+	// than serially — cutting the cold-path from ~15s to ~5s and keeping it
+	// well under the 25s request ceiling under load (audit 2026-06-19 item 8;
+	// the cache makes repeat hits instant, this fixes the cold hit). The
+	// breakdown's "untyped" reconciling bucket needs EventsTotal (from the
+	// series), so it's appended single-threaded after the barrier.
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() { defer wg.Done(); s.fillProtocolSeries(ctx, meta.Name, ids, since, view) }()
+	go func() { defer wg.Done(); s.fillProtocolBreakdown(ctx, meta.Name, ids, since, view) }()
+	go func() { defer wg.Done(); s.fillProtocolContractActivity(ctx, meta.Name, ids, since, view) }()
+	wg.Wait()
+	reconcileProtocolBreakdown(view)
+}
+
+// reconcileProtocolBreakdown appends the synthetic "untyped" bucket so the
+// event breakdown sums to EventsTotal (the unfiltered window total set by
+// fillProtocolSeries). The gap is events whose topic[0] symbol the lake
+// didn't denormalize — predominantly AMM swap/sync — see fillProtocolBreakdown.
+// Run after the parallel reads so EventsTotal is known.
+func reconcileProtocolBreakdown(view *ProtocolDetailView) {
+	var typedSum int64
+	for _, b := range view.EventBreakdown {
+		typedSum += b.Count
+	}
+	if untyped := view.EventsTotal - typedSum; untyped > 0 {
+		view.EventBreakdown = append(view.EventBreakdown, ProtocolEventTypeView{EventType: "untyped", Count: untyped})
+	}
 }
 
 // protocolContractIDs is the dedup'd analytics scope: every registered instance
@@ -524,18 +549,12 @@ func (s *Server) fillProtocolBreakdown(ctx context.Context, name string, ids []s
 		return
 	}
 	view.EventBreakdown = make([]ProtocolEventTypeView, 0, len(breakdown)+1)
-	var typedSum int64
 	for _, b := range breakdown {
 		view.EventBreakdown = append(view.EventBreakdown, ProtocolEventTypeView{EventType: b.EventType, Count: int64(b.Count)})
-		typedSum += int64(b.Count)
 	}
-	// Reconcile to the authoritative total: the gap is events whose
-	// topic[0] symbol the lake didn't denormalize (predominantly AMM
-	// swap/sync events). Surfacing it as a labeled bucket keeps
-	// sum(EventBreakdown) == EventsTotal == sum(ActivitySeries).
-	if untyped := view.EventsTotal - typedSum; untyped > 0 {
-		view.EventBreakdown = append(view.EventBreakdown, ProtocolEventTypeView{EventType: "untyped", Count: untyped})
-	}
+	// The reconciling "untyped" remainder bucket is appended by
+	// reconcileProtocolBreakdown after the parallel reads complete (it needs
+	// EventsTotal, which fillProtocolSeries sets concurrently).
 }
 
 // fillProtocolSeries populates the daily ActivitySeries + EventsTotal
