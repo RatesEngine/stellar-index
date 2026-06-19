@@ -22,7 +22,7 @@
 //	func main() {
 //	    c := client.New(client.Options{
 //	        BaseURL: "https://api.stellarindex.io",
-//	        APIKey:  "rek_…",  // optional; anonymous works at low rate-limit
+//	        APIKey:  "sip_…",  // optional; anonymous works at low rate-limit
 //	    })
 //	    p, err := c.Price(context.Background(), client.PriceQuery{
 //	        Asset: "native",
@@ -49,7 +49,7 @@
 //     SEP-10 challenge → sign → verify flow and pass it as
 //     Options.APIKey (the SDK forwards any token verbatim in the
 //     `Authorization: Bearer` header — the server's auth
-//     middleware accepts both `rek_*` API keys and SEP-10 JWTs at
+//     middleware accepts `sip_*` (and legacy `rek_*`) API keys and SEP-10 JWTs at
 //     the same surface). A typed SEP-10 helper wrapping the two-
 //     step flow lands as a follow-up.
 //

@@ -27,6 +27,12 @@ against.
 
 ### Changed
 
+- **Operator-minted API keys now use the `sip_` prefix** (Stellar Index
+  Pricing), matching the dashboard minter — `internal/auth` was still
+  emitting the pre-rebrand `rek_` prefix. Validation is SHA-256 of the full
+  plaintext, so existing `rek_` keys keep authenticating unchanged; the prefix
+  is a human-facing namespace label. SDK + OpenAPI key-prefix examples updated.
+
 - **Status page moved onto the main site at `/status`.** The standalone status
   app (its own Cloudflare Pages project at `status.stellarindex.io`) is now a
   `/status` route inside the explorer, so it inherits the site's nav/footer —

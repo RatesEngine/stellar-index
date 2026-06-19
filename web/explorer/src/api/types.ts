@@ -4977,7 +4977,7 @@ export interface paths {
          * @description Session-gated. Returns every key (active + revoked) for
          *     the authenticated user's account, ordered oldest-first.
          *     Plaintext is never returned by this endpoint — only
-         *     the prefix (`rek_4f9c1d8b…`).
+         *     the prefix (`sip_4f9c1d8b…`).
          */
         get: {
             parameters: {
@@ -6860,7 +6860,7 @@ export interface components {
             id: string;
             name: string;
             description?: string;
-            /** @description First 12 chars of the plaintext (`rek_<8hex>`). */
+            /** @description First 12 chars of the plaintext (`sip_<8hex>`). */
             key_prefix: string;
             /** @enum {string} */
             tier: "apikey" | "partner" | "operator";
@@ -8078,7 +8078,7 @@ export interface components {
             label?: string;
             /**
              * @description First 12 characters of the plaintext key (e.g.
-             *     `rek_4f9c1d8b`). Safe to log; customers use it to
+             *     `sip_4f9c1d8b`). Safe to log; customers use it to
              *     match dashboard rows to entries in their secret
              *     manager. Empty on legacy keys minted before the
              *     prefix feature shipped.
@@ -8110,7 +8110,7 @@ export interface components {
                 plaintext: string;
                 /**
                  * @description First 12 characters of the plaintext (e.g.
-                 *     `rek_4f9c1d8b`). Safe to display in logs and
+                 *     `sip_4f9c1d8b`). Safe to display in logs and
                  *     dashboards; customers use it to identify
                  *     which key matches a row in their secret
                  *     manager. Same value also returned by GET

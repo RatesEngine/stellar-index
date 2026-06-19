@@ -17033,7 +17033,7 @@
               "request": {
                 "name": "Customer dashboard — list this account's API keys.",
                 "description": {
-                  "content": "Session-gated. Returns every key (active + revoked) for\nthe authenticated user's account, ordered oldest-first.\nPlaintext is never returned by this endpoint — only\nthe prefix (`rek_4f9c1d8b…`).\n",
+                  "content": "Session-gated. Returns every key (active + revoked) for\nthe authenticated user's account, ordered oldest-first.\nPlaintext is never returned by this endpoint — only\nthe prefix (`sip_4f9c1d8b…`).\n",
                   "type": "text/plain"
                 },
                 "url": {

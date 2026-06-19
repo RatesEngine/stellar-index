@@ -67,7 +67,7 @@ type CreateAPIKeyRequest struct {
 // `apikey:<sha256-hex>` shape that [RedisAPIKeyValidator] reads.
 //
 // The store is the source of truth for issuance — it generates the
-// plaintext (32 bytes from crypto/rand, hex-encoded with the `rek_`
+// plaintext (32 bytes from crypto/rand, hex-encoded with the `sip_`
 // prefix) and the KeyID (8 bytes from crypto/rand, hex-encoded with
 // the `kid_` prefix). The KeyID is distinct from the secret hash so
 // it can appear in logs and customer-facing responses safely.
@@ -121,7 +121,7 @@ func NewRedisAPIKeyStore(rdb redis.Cmdable, opts ...StoreOption) *RedisAPIKeySto
 // Workflow:
 //
 //  1. Validate request (Identifier required).
-//  2. Generate KeyID (`kid_<16-hex>`) and plaintext (`rek_<64-hex>`).
+//  2. Generate KeyID (`kid_<16-hex>`) and plaintext (`sip_<64-hex>`).
 //  3. Build APIKeyRecord with stamped CreatedAt and tier-defaulted Tier.
 //  4. SET apikey:<sha256(plaintext)> JSON. SETNX semantics aren't
 //     needed — the SHA-256 collision domain is astronomical and
@@ -139,7 +139,12 @@ func (s *RedisAPIKeyStore) Create(ctx context.Context, req CreateAPIKeyRequest) 
 	if err != nil {
 		return APIKeyRecord{}, "", fmt.Errorf("auth: Create: generate key_id: %w", err)
 	}
-	plaintext, err := generateID(s.randRead, "rek_", 32)
+	// `sip_` namespace prefix (Stellar Index Pricing). Matches the
+	// dashboard minter (dashboardkeys.generatePlaintext). Legacy
+	// `rek_` keys minted before the rebrand keep authenticating
+	// unchanged — validation is SHA-256 of the full plaintext, so the
+	// prefix is purely a human-facing namespace label.
+	plaintext, err := generateID(s.randRead, "sip_", 32)
 	if err != nil {
 		return APIKeyRecord{}, "", fmt.Errorf("auth: Create: generate plaintext: %w", err)
 	}
@@ -187,7 +192,7 @@ func (s *RedisAPIKeyStore) Create(ctx context.Context, req CreateAPIKeyRequest) 
 
 // keyPrefix returns the human-friendly identifier portion of a
 // freshly-minted plaintext API key — the first 12 characters,
-// covering the `rek_` namespace prefix plus 8 hex chars of
+// covering the `sip_` namespace prefix plus 8 hex chars of
 // entropy. Safe to log: 32 bits is far short of authentication-
 // material; the secret tail is what makes the key. Customers
 // see this in dashboard listings to identify which row maps to

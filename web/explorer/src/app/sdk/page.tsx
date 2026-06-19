@@ -24,7 +24,7 @@ import (
 func main() {
     c := client.New(client.Options{
         BaseURL: "https://api.stellarindex.io",
-        APIKey:  "rek_…", // optional; anonymous works at the public rate-limit
+        APIKey:  "sip_…", // optional; anonymous works at the public rate-limit
     })
 
     p, err := c.Price(context.Background(), client.PriceQuery{

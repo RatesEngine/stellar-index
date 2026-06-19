@@ -57,8 +57,8 @@ func TestRedisAPIKeyStore_CreateRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if !strings.HasPrefix(plaintext, "rek_") {
-		t.Errorf("plaintext should start with rek_, got %q", plaintext)
+	if !strings.HasPrefix(plaintext, "sip_") {
+		t.Errorf("plaintext should start with sip_, got %q", plaintext)
 	}
 	if !strings.HasPrefix(rec.KeyID, "kid_") {
 		t.Errorf("KeyID should start with kid_, got %q", rec.KeyID)
@@ -93,7 +93,7 @@ func TestRedisAPIKeyStore_CreateRoundTrip(t *testing.T) {
 	}
 
 	// KeyPrefix is the first 12 chars of the plaintext — covering
-	// `rek_` plus 8 hex chars. Customers see this in dashboard
+	// `sip_` plus 8 hex chars. Customers see this in dashboard
 	// listings to identify which key matches a row in their secret
 	// manager. Same prefix appears on the record AND on the
 	// Subject the validator constructs from it.
@@ -103,7 +103,7 @@ func TestRedisAPIKeyStore_CreateRoundTrip(t *testing.T) {
 	if rec.KeyPrefix != plaintext[:12] {
 		t.Errorf("KeyPrefix = %q, want first 12 of plaintext %q", rec.KeyPrefix, plaintext[:12])
 	}
-	if !strings.HasPrefix(rec.KeyPrefix, "rek_") || len(rec.KeyPrefix) != 12 {
+	if !strings.HasPrefix(rec.KeyPrefix, "sip_") || len(rec.KeyPrefix) != 12 {
 		t.Errorf("KeyPrefix shape unexpected: %q", rec.KeyPrefix)
 	}
 	if subject.KeyPrefix != rec.KeyPrefix {
