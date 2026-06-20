@@ -68,6 +68,22 @@ against.
   — far more detail per window.
 
 ### Fixed
+- **`/v1/price` latency-burn incident (page severity) — root-caused + fixed.**
+  `LatestClosedVWAP1mForPair`'s "latest closed bucket" predicate was
+  `bucket + INTERVAL '1 minute' <= now()` — a function on the indexed `bucket`
+  column, so it's **not sargable**: TimescaleDB couldn't do chunk exclusion or
+  an ordered index scan, and `max(bucket)` ran a full per-chunk partial
+  aggregate over the pair's ENTIRE prices_1m history (~13.7k rows/chunk × every
+  chunk back to 2015). Harmless while a pair was sparse; once
+  crypto:XLM/fiat:USD accrued dense history (CEX coinbase/kraken trades, from
+  ~20:00 UTC 2026-06-19) it ballooned to **~446ms execution + 55k planner
+  buffers**, driving the price p95 from ~50ms to ~400ms and the SLO burn /
+  sla-probe alerts. Rewrote to the arithmetically-identical-but-sargable
+  `bucket <= now() - INTERVAL '1 minute'`, so the ChunkAppend reads just the
+  newest chunk's max via the index: **446ms → ~7ms** (66×). (The rc.133 fix to
+  this same function only bounded the sparse case; this closes the dense case.
+  The sibling `ORDER BY bucket DESC LIMIT` readers were verified unaffected —
+  ordered index scan stops early.)
 - `/v1/contracts/{id}/wasm` now distinguishes a **Stellar Asset Contract**
   (the built-in SAC behind `native`, USDC, and every classic asset — among
   the busiest contracts on the network) from a genuinely-uncaptured WASM

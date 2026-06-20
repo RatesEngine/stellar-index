@@ -342,17 +342,28 @@ func (s *Store) LatestClosedVWAP1mForPair(ctx context.Context, p canonical.Pair)
 	// combine just that bucket's 1-2 rows. The earlier form scanned the
 	// pair's ENTIRE prices_1m history (back to 2015) before LIMIT 1,
 	// which measured ~1s warm and ballooned to ~9s under load (it drove
-	// a latency-burn incident on 2026-06-19). This version is bounded.
+	// a latency-burn incident on 2026-06-19).
+	//
+	// The "closed bucket" predicate MUST be written `bucket <= now() - 1min`,
+	// NOT `bucket + 1min <= now()`. The latter applies a function to the
+	// indexed `bucket` column, making it non-sargable: TimescaleDB can't do
+	// chunk exclusion or an ordered index scan, so max() scans EVERY chunk
+	// of the pair's history (each a full per-chunk partial-aggregate over
+	// thousands of rows). That re-introduced the same latency-burn incident
+	// on 2026-06-19 once a dense pair (crypto:XLM/fiat:USD via CEX) accrued
+	// long history: ~446ms execution + 55k planner buffers. The sargable
+	// form lets the ChunkAppend read just the newest chunk's max via the
+	// index (~7ms). The two predicates are arithmetically identical.
 	const q = `
         WITH latest AS (
             SELECT max(b) AS b FROM (
                 SELECT max(bucket) AS b FROM prices_1m
                  WHERE base_asset = $1 AND quote_asset = $2
-                   AND bucket + INTERVAL '1 minute' <= now()
+                   AND bucket <= now() - INTERVAL '1 minute'
                 UNION ALL
                 SELECT max(bucket) AS b FROM prices_1m
                  WHERE base_asset = $2 AND quote_asset = $1
-                   AND bucket + INTERVAL '1 minute' <= now()
+                   AND bucket <= now() - INTERVAL '1 minute'
             ) u
         ),
         r AS (
