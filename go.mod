@@ -36,7 +36,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.24
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_model v0.6.2
