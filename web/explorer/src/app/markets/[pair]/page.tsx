@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { formatCompact } from '@/lib/format';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd, datasetJsonLd } from '@/lib/seo';
+import { serializeJsonLd, datasetJsonLd, ogImageFor } from '@/lib/seo';
 import { Breadcrumbs } from '@/components/ui';
 import { PairChart } from './PairChart';
 import { SourceBreakdown } from './SourceBreakdown';
@@ -174,13 +174,13 @@ export async function generateMetadata({
       description,
       url: canonical,
       type: 'website',
-      images: SITE_OG_IMAGES,
+      images: [ogImageFor('markets', pair)],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: SITE_TWITTER_IMAGES,
+      images: [ogImageFor('markets', pair)],
     },
   };
 }

@@ -17,6 +17,17 @@
 // SVG og:images (no raster = no link-preview thumbnail). Keep it 1200×630.
 export const SITE_OG_IMAGE_PATH = '/og.png';
 
+/**
+ * URL for the dynamic OG card (the CF Pages Function at functions/og/[[path]]).
+ * Per-entity 1200×630 PNG, edge-cached — beats the single static /og.png for
+ * social shares. Relative so Next's metadataBase resolves it to the prod
+ * origin. (Live-data enrichment of the card is a follow-up; v1 is branded +
+ * entity-labelled.)
+ */
+export function ogImageFor(type: string, id: string): string {
+  return `/og/${type}/${encodeURIComponent(id)}`;
+}
+
 export const SITE_OG_IMAGES = [
   {
     url: SITE_OG_IMAGE_PATH,
