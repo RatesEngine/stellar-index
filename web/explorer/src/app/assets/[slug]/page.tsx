@@ -5,7 +5,7 @@ import { Suspense } from 'react';
 import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
-import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES, serializeJsonLd, datasetJsonLd } from '@/lib/seo';
+import { serializeJsonLd, datasetJsonLd, ogImageFor } from '@/lib/seo';
 import {
   Badge,
   Breadcrumbs,
@@ -568,13 +568,13 @@ export async function generateMetadata({
       description,
       url: canonical,
       type: 'website',
-      images: SITE_OG_IMAGES,
+      images: [ogImageFor('assets', canonicalSlug)],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: SITE_TWITTER_IMAGES,
+      images: [ogImageFor('assets', canonicalSlug)],
     },
   };
 }
