@@ -15,6 +15,8 @@ export interface ProtocolRegistryEntry {
   name: string;
   /** Friendly display label for headers + cards. */
   label: string;
+  /** Category — mirrors the Go registry (amm/dex/lending/oracle/yield/bridge). */
+  category: string;
   /** Short fallback description (the API serves the authoritative one). */
   description: string;
 }
@@ -22,76 +24,91 @@ export interface ProtocolRegistryEntry {
 export const PROTOCOLS: ProtocolRegistryEntry[] = [
   {
     name: 'sdex',
+    category: 'dex',
     label: 'SDEX',
     description: "Stellar's protocol-native central-limit order book.",
   },
   {
     name: 'soroswap',
+    category: 'amm',
     label: 'Soroswap',
     description: 'Constant-product Soroban AMM pairs.',
   },
   {
     name: 'aquarius',
+    category: 'amm',
     label: 'Aquarius',
     description: 'Incentivised constant-product and stableswap pools.',
   },
   {
     name: 'phoenix',
+    category: 'amm',
     label: 'Phoenix',
     description: 'Soroban constant-product AMM with liquidity + stake events.',
   },
   {
     name: 'comet',
+    category: 'amm',
     label: 'Comet',
     description: 'Balancer-v1-style weighted pools on Soroban.',
   },
   {
     name: 'blend',
+    category: 'lending',
     label: 'Blend',
     description: 'Isolated lending pools on Soroban.',
   },
   {
     name: 'defindex',
+    category: 'yield',
     label: 'DeFindex',
     description: 'Yield vaults and strategies across Soroban DeFi.',
   },
   {
     name: 'cctp',
+    category: 'bridge',
     label: 'Circle CCTP',
     description: 'Canonical burn-and-mint USDC bridging.',
   },
   {
     name: 'rozo',
+    category: 'bridge',
     label: 'Rozo',
     description: 'Intent-bridge payment settlement on Stellar.',
   },
   {
     name: 'soroswap-router',
+    category: 'amm',
     label: 'Soroswap Router',
     description: 'Aggregated multi-hop swap intents from router invocations.',
   },
   {
     name: 'band',
+    category: 'oracle',
     label: 'Band Protocol',
     description: 'Reference-rate oracle observed from relay() invocations.',
   },
   {
     name: 'reflector-dex',
+    category: 'oracle',
     label: 'Reflector (DEX)',
     description: 'Reflector oracle — Stellar-DEX price feed.',
   },
   {
     name: 'reflector-cex',
+    category: 'oracle',
     label: 'Reflector (CEX)',
     description: 'Reflector oracle — centralized-exchange price feed.',
   },
   {
     name: 'reflector-fx',
+    category: 'oracle',
     label: 'Reflector (FX)',
     description: 'Reflector oracle — fiat exchange-rate feed.',
   },
   {
     name: 'redstone',
+    category: 'oracle',
     label: 'RedStone',
     description: 'Batched multi-feed price pushes to the RedStone adapter.',
   },
