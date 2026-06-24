@@ -83,6 +83,13 @@ func sep1RefreshCmd(args []string) error {
 			failed++
 			continue
 		}
+		// Bidirectional SEP-1 verification: the org is only "verified" if the
+		// fetched toml's [[CURRENCIES]] lists THIS issuer back — i.e. the domain
+		// owner attests to this account. Without it, anyone can set their
+		// account's home_domain to a reputable domain and inherit its ORG_NAME
+		// (spoofing). Callers MUST only merge/group issuers by org when this is
+		// true; one-directional matches are "claimed, unverified".
+		orgVerified := tomlListsIssuer(sep.Currencies, c.GStrkey)
 		// Compact payload — OrgName/Documentation for /v1/issuers,
 		// Currencies for the per-asset SEP-1 overlay on /v1/assets/{id}
 		// (the latter used to live-fetch per request; this cron is now
@@ -109,6 +116,7 @@ func sep1RefreshCmd(args []string) error {
 		}
 		payload, jerr := json.Marshal(map[string]any{
 			"OrgName":       sep.OrgName,
+			"OrgVerified":   orgVerified,
 			"Version":       sep.Version,
 			"Documentation": sep.Documentation,
 			"Currencies":    currencies,
@@ -134,4 +142,16 @@ func sep1RefreshCmd(args []string) error {
 		fmt.Println("(dry-run; no rows written)")
 	}
 	return nil
+}
+
+// tomlListsIssuer reports whether the fetched SEP-1 toml's [[CURRENCIES]] lists
+// the given issuer back — the bidirectional half of org verification. Without
+// this match, ORG_NAME from a self-declared home_domain is spoofable.
+func tomlListsIssuer(currencies []metadata.Currency, issuer string) bool {
+	for _, cur := range currencies {
+		if cur.Issuer == issuer {
+			return true
+		}
+	}
+	return false
 }

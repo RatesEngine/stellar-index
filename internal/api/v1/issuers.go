@@ -30,11 +30,14 @@ type IssuersReader interface {
 // the `stellarindex-ops sep1-refresh` job; empty when never
 // resolved or when the issuer has no documentation block.
 type IssuerListEntry struct {
-	GStrkey               string `json:"g_strkey"`
-	HomeDomain            string `json:"home_domain,omitempty"`
-	OrgName               string `json:"org_name,omitempty"`
-	AssetCount            int64  `json:"asset_count"`
-	TotalObservationCount int64  `json:"total_observation_count"`
+	GStrkey    string `json:"g_strkey"`
+	HomeDomain string `json:"home_domain,omitempty"`
+	OrgName    string `json:"org_name,omitempty"`
+	// OrgVerified is true only when the issuer's SEP-1 toml lists it back
+	// (bidirectional). Group/merge issuers by org only when true.
+	OrgVerified           bool  `json:"org_verified"`
+	AssetCount            int64 `json:"asset_count"`
+	TotalObservationCount int64 `json:"total_observation_count"`
 	// ScamReason is non-empty when the issuer is flagged as scam /
 	// malicious by the curated `known_scams.go` map (sourced from
 	// stellar.expert's directory). Clients should render a warning
@@ -154,6 +157,7 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 			GStrkey:               r.GStrkey,
 			HomeDomain:            homeDomain,
 			OrgName:               orgName,
+			OrgVerified:           r.OrgVerified,
 			AssetCount:            r.AssetCount,
 			TotalObservationCount: r.TotalObservationCount,
 			ScamReason:            scamReason(r.GStrkey),

@@ -137,6 +137,14 @@ export function IssuersTable() {
                     ) : (
                       <span className="text-xs text-ink-faint">—</span>
                     )}
+                    {row.org_verified && row.org_name && (
+                      <span
+                        title="SEP-1 verified — the organisation's stellar.toml lists this issuer back (bidirectional)"
+                        className="rounded bg-up-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-up-strong"
+                      >
+                        ✓ Verified
+                      </span>
+                    )}
                     {row.scam_reason && (
                       <span
                         title={row.scam_reason}

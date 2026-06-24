@@ -100,9 +100,13 @@ func (s *Store) GetIssuer(ctx context.Context, gStrkey string) (IssuerRow, error
 // Empty when the SEP-1 fetcher hasn't refreshed for this issuer
 // yet, or when the toml has no documentation block.
 type IssuerSummary struct {
-	GStrkey               string
-	HomeDomain            string
-	OrgName               string
+	GStrkey    string
+	HomeDomain string
+	OrgName    string
+	// OrgVerified is true only when the SEP-1 toml's [[CURRENCIES]] lists this
+	// issuer back (bidirectional verification). Callers must only merge/group
+	// issuers by org when this is true — OrgName alone is spoofable.
+	OrgVerified           bool
 	AssetCount            int64
 	TotalObservationCount int64
 }
@@ -124,6 +128,7 @@ func (s *Store) ListIssuers(ctx context.Context, limit int) ([]IssuerSummary, er
         SELECT i.g_strkey,
                COALESCE(i.home_domain, ''),
                COALESCE(i.sep1_payload->>'OrgName', '') AS org_name,
+               COALESCE((i.sep1_payload->>'OrgVerified')::boolean, false) AS org_verified,
                count(c.asset_id)::bigint           AS asset_count,
                COALESCE(sum(c.observation_count), 0)::bigint AS total_obs
           FROM issuers i
@@ -140,7 +145,7 @@ func (s *Store) ListIssuers(ctx context.Context, limit int) ([]IssuerSummary, er
 	out := make([]IssuerSummary, 0, limit)
 	for rows.Next() {
 		var r IssuerSummary
-		if err := rows.Scan(&r.GStrkey, &r.HomeDomain, &r.OrgName, &r.AssetCount, &r.TotalObservationCount); err != nil {
+		if err := rows.Scan(&r.GStrkey, &r.HomeDomain, &r.OrgName, &r.OrgVerified, &r.AssetCount, &r.TotalObservationCount); err != nil {
 			return nil, fmt.Errorf("timescale: ListIssuers scan: %w", err)
 		}
 		out = append(out, r)

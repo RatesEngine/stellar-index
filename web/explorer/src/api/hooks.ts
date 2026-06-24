@@ -592,6 +592,9 @@ export type IssuerListEntry = {
   g_strkey: string;
   home_domain?: string;
   org_name?: string;
+  // True only when the issuer's SEP-1 toml lists it back (bidirectional). Show
+  // a verified badge; safe to group/merge issuers by org only when true.
+  org_verified?: boolean;
   asset_count: number;
   total_observation_count: number;
   // Non-empty when the issuer is on the curated scam list (sourced
