@@ -44,7 +44,7 @@ import { AccountGate } from './AccountGate';
 const DOCS_URL = 'https://docs.stellarindex.io';
 
 /**
- * /account — the in-site customer dashboard landing (Overview). Ported
+ * /dashboard — the in-site customer dashboard landing (Overview). Ported
  * from the standalone dashboard's overview: a metric strip, a
  * getting-started checklist, the current plan, and quick links. Gated
  * on the magic-link session via AccountGate (reuses useMe); the
@@ -83,7 +83,7 @@ function OverviewBody({ me }: { me: MeResponse }) {
           title={`Welcome back, ${firstName(me)}`}
           description="Your account at a glance — keys, plan, and where to go next."
           actions={
-            <ButtonLink href="/account/keys" variant="primary">
+            <ButtonLink href="/dashboard/keys" variant="primary">
               <Plus className="h-4 w-4" />
               New API key
             </ButtonLink>
@@ -215,7 +215,7 @@ function GettingStarted({
           </code>
           .{' '}
           <Link
-            href="/account/keys"
+            href="/dashboard/keys"
             className="font-medium text-brand-700 hover:underline"
           >
             Create one →
@@ -340,7 +340,7 @@ function PlanCard({ me }: { me: MeResponse }) {
         </div>
         {!isEnterprise && (
           <ButtonLink
-            href="/account/settings"
+            href="/dashboard/settings"
             variant="secondary"
             size="sm"
             className="w-full"
@@ -357,13 +357,13 @@ function PlanCard({ me }: { me: MeResponse }) {
 function QuickLinks() {
   const links = [
     {
-      href: '/account/keys',
+      href: '/dashboard/keys',
       label: 'API keys',
       icon: KeyRound,
       desc: 'Create & revoke',
     },
     {
-      href: '/account/usage',
+      href: '/dashboard/usage',
       label: 'Usage',
       icon: BarChart3,
       desc: 'Requests & quota',

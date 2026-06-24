@@ -97,3 +97,8 @@
 # (Stellar's native term + Horizon convention). Clean path redirect (no query
 # string), so a _redirects 301 is correct. SEO plan D-redirect set.
 /address/*  /accounts/:splat  301
+
+# Dashboard relocated /account/* → /dashboard/* (SEO plan, dashboard is noindex;
+# entities use plural /accounts/{g}). Keep old bookmarks working.
+/account            /dashboard/         301
+/account/*          /dashboard/:splat   301

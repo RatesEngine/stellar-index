@@ -6,7 +6,7 @@ import { useEffect, type ReactNode } from 'react';
 import { useMe, type MeResponse } from '@/api/hooks';
 import { Container, Section, Skeleton } from '@/components/ui';
 
-// AccountGate is the client auth gate for every /account/* page. It
+// AccountGate is the client auth gate for every /dashboard/* page. It
 // reuses `useMe()` — the same cookie-authed `/v1/account/me` probe the
 // navbar uses — so there's a single source of truth for "is this
 // visitor signed in". The explorer is a static export, so this runs

@@ -30,7 +30,7 @@ import { cn } from '@/lib/cn';
 import { AccountGate } from '../AccountGate';
 
 /**
- * /account/settings — read-only profile, the current plan, and a
+ * /dashboard/settings — read-only profile, the current plan, and a
  * danger zone (sign out). Self-service mutations (rename / email
  * change / deletion) are honestly deferred to support. Ported from the
  * standalone dashboard.

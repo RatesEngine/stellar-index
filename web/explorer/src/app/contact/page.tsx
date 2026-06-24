@@ -136,7 +136,7 @@ export default function ContactPage() {
             /signin
           </Link>
           {' '}(no password) and mint one from{' '}
-          <Link href="/account" className="text-brand-600 hover:underline">
+          <Link href="/dashboard" className="text-brand-600 hover:underline">
             /account
           </Link>
           . The same page shows your tier, 30d usage history, and per-key

@@ -55,7 +55,7 @@ export function Footer() {
             links={[
               { label: 'Sign in', href: '/signin' },
               { label: 'Create account', href: '/signup' },
-              { label: 'Your account', href: '/account' },
+              { label: 'Your account', href: '/dashboard' },
               { label: 'Developer docs', href: '/docs' },
               { label: 'API reference', href: 'https://docs.stellarindex.io', external: true },
               { label: 'Go SDK', href: '/sdk' },
