@@ -28,9 +28,12 @@ const HASH_RE = /^[0-9a-fA-F]{64}$/;
  * operations + events in one response) and renders the three
  * sections. Handles 404 (not found) and 400 (bad hash) distinctly.
  */
-export function TxView() {
+export function TxView({ hash: hashProp }: { hash?: string } = {}) {
+  // The path route /transactions/[hash] passes `hash` as a prop; the legacy
+  // /tx?hash= route (kept for redirect compatibility) reads it from the query
+  // string. Prop wins when provided.
   const params = useSearchParams();
-  const hash = (params.get('hash') ?? '').trim();
+  const hash = (hashProp ?? params.get('hash') ?? '').trim();
   const looksValid = HASH_RE.test(hash);
 
   const { data, isLoading, isError, error } = useQuery<TxSummary>({

@@ -28,9 +28,11 @@ const PAGE_SIZE = 50;
  * (ledger, op_index, event_index) keyset — a ledger-only cursor would
  * drop the rest of a ledger that a busy contract straddles across a page.
  */
-export function ContractView() {
+export function ContractView({ id: idProp }: { id?: string } = {}) {
+  // Path route /contracts/[id] passes `id` as a prop; legacy /contract?id= reads
+  // it from the query string (kept for redirect compatibility). Prop wins.
   const params = useSearchParams();
-  const id = (params.get('id') ?? '').trim();
+  const id = (idProp ?? params.get('id') ?? '').trim();
   const looksValid = CONTRACT_RE.test(id);
 
   const [cursor, setCursor] = useState<string | undefined>(undefined);

@@ -35,9 +35,11 @@ const PAGE_SIZE = 50;
  * merges, …). The backend stamps a `scope` field; incoming coverage
  * tracks the participant-index capture + backfill.
  */
-export function AccountView() {
+export function AccountView({ id: idProp }: { id?: string } = {}) {
+  // Path route /accounts/[g] passes `id` as a prop; legacy /accounts?id= reads
+  // it from the query string (kept for redirect compatibility). Prop wins.
   const params = useSearchParams();
-  const id = (params.get('id') ?? '').trim();
+  const id = (idProp ?? params.get('id') ?? '').trim();
   const looksValid = ACCOUNT_RE.test(id);
 
   const txQ = useQuery<AccountTransactionsResp>({

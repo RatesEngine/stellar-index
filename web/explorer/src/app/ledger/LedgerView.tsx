@@ -21,9 +21,11 @@ import {
  * Client view for /ledger?seq=N. Fetches the ledger header and its
  * transactions in parallel and renders them as cards + a table.
  */
-export function LedgerView() {
+export function LedgerView({ seq: seqProp }: { seq?: string } = {}) {
+  // Path route /ledgers/[seq] passes `seq` as a prop; legacy /ledger?seq= reads
+  // it from the query string (kept for redirect compatibility). Prop wins.
   const params = useSearchParams();
-  const seqRaw = params.get('seq') ?? '';
+  const seqRaw = seqProp ?? params.get('seq') ?? '';
   const seq = /^\d+$/.test(seqRaw.trim()) ? Number(seqRaw.trim()) : null;
 
   const ledgerQ = useQuery<Ledger>({
