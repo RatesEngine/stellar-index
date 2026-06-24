@@ -38,6 +38,7 @@ func sep1RefreshCmd(args []string) error {
 	olderThan := fs.Duration("older-than", 24*time.Hour, "Skip issuers refreshed more recently than this")
 	timeout := fs.Duration("timeout", 5*time.Minute, "Wall-clock timeout for the whole run")
 	dryRun := fs.Bool("dry-run", false, "Fetch + print without writing to issuers.sep1_payload")
+	issuer := fs.String("issuer", "", "Refresh ONLY this issuer G-strkey, bypassing the staleness queue")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -59,15 +60,26 @@ func sep1RefreshCmd(args []string) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	candidates, err := store.IssuersNeedingSep1Refresh(ctx, *olderThan, *limit)
-	if err != nil {
-		return err
+	var candidates []timescale.IssuerSep1Candidate
+	if *issuer != "" {
+		// Targeted single-issuer refresh — skip the staleness queue entirely.
+		c, cerr := store.IssuerSep1CandidateByStrkey(ctx, *issuer)
+		if cerr != nil {
+			return cerr
+		}
+		candidates = []timescale.IssuerSep1Candidate{c}
+		fmt.Printf("Refreshing 1 issuer (targeted: %s)…\n", *issuer)
+	} else {
+		candidates, err = store.IssuersNeedingSep1Refresh(ctx, *olderThan, *limit)
+		if err != nil {
+			return err
+		}
+		if len(candidates) == 0 {
+			fmt.Println("No issuers need refresh.")
+			return nil
+		}
+		fmt.Printf("Refreshing %d issuer(s) (older than %s)…\n", len(candidates), *olderThan)
 	}
-	if len(candidates) == 0 {
-		fmt.Println("No issuers need refresh.")
-		return nil
-	}
-	fmt.Printf("Refreshing %d issuer(s) (older than %s)…\n", len(candidates), *olderThan)
 
 	resolver := metadata.NewResolver(metadata.Options{Timeout: 10 * time.Second})
 

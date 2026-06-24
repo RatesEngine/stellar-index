@@ -27,6 +27,9 @@ against.
   `sep1-refresh` cron computes the flag (`tomlListsIssuer`) and persists it
   in the `sep1_payload` JSONB; `/v1/issuers` reads
   `sep1_payload->>'OrgVerified'`. Each `OK` line now prints `verified=…`.
+  New `sep1-refresh -issuer <g_strkey>` force-refreshes one specific account
+  on demand (bypassing the staleness queue) — for onboarding a newly-verified
+  org without waiting for it to surface through ~43k pubnet issuers.
 - `stellarindex-ops state-snapshot` — reads a history-archive checkpoint's full
   current ledger-entry state (the bucket list) via the SDK's
   `CheckpointChangeReader` and tallies it by entry type. The read-only

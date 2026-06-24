@@ -174,6 +174,24 @@ type IssuerSep1Candidate struct {
 	HomeDomain string
 }
 
+// IssuerSep1CandidateByStrkey returns the (g_strkey, home_domain) pair for one
+// specific issuer — the targeted counterpart of IssuersNeedingSep1Refresh, used
+// by `sep1-refresh -issuer <g>` to force-refresh a single account on demand
+// (e.g. a newly-onboarded verified org) without waiting for it to surface
+// through the staleness queue. Returns sql.ErrNoRows if the issuer is unknown,
+// or an error with no home_domain if the account has none (nothing to fetch).
+func (s *Store) IssuerSep1CandidateByStrkey(ctx context.Context, gStrkey string) (IssuerSep1Candidate, error) {
+	const q = `SELECT g_strkey, COALESCE(home_domain, '') FROM issuers WHERE g_strkey = $1`
+	var c IssuerSep1Candidate
+	if err := s.db.QueryRowContext(ctx, q, gStrkey).Scan(&c.GStrkey, &c.HomeDomain); err != nil {
+		return IssuerSep1Candidate{}, fmt.Errorf("timescale: IssuerSep1CandidateByStrkey: %w", err)
+	}
+	if c.HomeDomain == "" {
+		return IssuerSep1Candidate{}, fmt.Errorf("timescale: issuer %s has no home_domain to resolve", gStrkey)
+	}
+	return c, nil
+}
+
 // IssuersNeedingSep1Refresh returns up to `limit` issuers whose
 // home_domain is set but sep1_resolved_at is missing or older than
 // `staleness`. Ordered by sep1_resolved_at ASC NULLS FIRST so
