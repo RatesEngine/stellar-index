@@ -99,6 +99,11 @@ jobs:
       - name: Cloudflare file-budget guard
         run: bash scripts/ci/explorer-file-budget.sh web/explorer/out
 
+      # Assert every indexable page has title + description + canonical
+      # (noindex pages exempt). SEO plan WS15.
+      - name: SEO metadata lint
+        run: bash scripts/ci/explorer-seo-lint.sh web/explorer/out
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0  # v4.0.0
         with:
