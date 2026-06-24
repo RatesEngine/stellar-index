@@ -46,7 +46,7 @@ import {
 import { AccountGate } from '../AccountGate';
 
 /**
- * /account/usage — per-key activity + rate-limit headroom + the daily
+ * /dashboard/usage — per-key activity + rate-limit headroom + the daily
  * request counts the API exposes via /v1/account/usage. Detailed
  * per-endpoint analytics are honestly flagged as not-yet-shipped.
  */
@@ -122,7 +122,7 @@ function UsageBody({ me }: { me: MeResponse }) {
                 title="No active keys"
                 description="Create an API key and start making requests to see activity here."
                 action={
-                  <ButtonLink href="/account/keys">Go to API keys</ButtonLink>
+                  <ButtonLink href="/dashboard/keys">Go to API keys</ButtonLink>
                 }
               />
             </CardBody>

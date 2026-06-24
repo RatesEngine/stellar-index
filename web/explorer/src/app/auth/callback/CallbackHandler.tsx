@@ -22,7 +22,7 @@ type State =
  * configured landing page logged in.
  *
  * If the operator has DashboardBaseURL = stellarindex.io, the
- * post-login redirect lands on /account here and the navbar's
+ * post-login redirect lands on /dashboard here and the navbar's
  * useMe hook lights up.
  */
 export function CallbackHandler() {
@@ -42,8 +42,8 @@ export function CallbackHandler() {
     // Pre-flight only — the actual redirect needs to be a full
     // page navigation so the API's Set-Cookie applies and the
     // 303 redirect lands the browser on the post-login page.
-    const next = params.get('next') ?? '/account';
-    const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/account';
+    const next = params.get('next') ?? '/dashboard';
+    const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
     const url = new URL(`${API_BASE_URL}/v1/auth/callback`);
     url.searchParams.set('token', token);
     url.searchParams.set('next', safeNext);

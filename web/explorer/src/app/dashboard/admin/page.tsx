@@ -27,7 +27,7 @@ import {
 import { AccountGate } from '../AccountGate';
 
 /**
- * /account/admin — staff-only cockpit. Gated on the magic-link session
+ * /dashboard/admin — staff-only cockpit. Gated on the magic-link session
  * (AccountGate) and then on `me.user.is_staff`. The Customer look-up tool
  * is live (GET /v1/account/admin/lookup); tier overrides + incident tooling
  * are still Phase 1.5 (they need write/impersonation endpoints).

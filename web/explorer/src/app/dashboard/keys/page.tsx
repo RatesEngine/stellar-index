@@ -47,7 +47,7 @@ import {
 import { AccountGate } from '../AccountGate';
 
 /**
- * /account/keys — API-key management. Ported from the standalone
+ * /dashboard/keys — API-key management. Ported from the standalone
  * dashboard: a table of keys, a create flow that reveals the secret
  * once, and revoke-with-confirm. Reads/writes `/v1/dashboard/keys`
  * with the session cookie (credentials: include) via @/api/account.

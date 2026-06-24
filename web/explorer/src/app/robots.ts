@@ -9,7 +9,7 @@ export const dynamic = 'force-static';
  *   /dev/   — design-iteration scaffolding
  *   /embed/ — iframe widget targets, not standalone content
  *   /auth/  — magic-link callback, expires after one click
- *   /account — authenticated dashboard, irrelevant to crawlers
+ *   /dashboard — authenticated dashboard, irrelevant to crawlers
  *   /signin, /signup — auth gateways, not content
  */
 export default function robots(): MetadataRoute.Robots {
@@ -18,7 +18,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/dev/', '/embed/', '/auth/', '/account', '/signin', '/signup'],
+        disallow: ['/dev/', '/embed/', '/auth/', '/dashboard', '/signin', '/signup'],
       },
     ],
     sitemap: 'https://stellarindex.io/sitemap.xml',

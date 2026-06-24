@@ -119,7 +119,7 @@ export default function DocsPage() {
           <code className="font-mono text-sm">sip_*</code> tokens (legacy{' '}
           <code className="font-mono text-sm">rek_*</code> still accepted), minted
           in the{' '}
-          <Link className="text-brand-600 hover:underline" href="/account/keys">
+          <Link className="text-brand-600 hover:underline" href="/dashboard/keys">
             dashboard
           </Link>
           , and passed as a bearer token:

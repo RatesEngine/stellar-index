@@ -227,7 +227,7 @@ export default function SDKPage() {
                   /signin
                 </Link>{' '}
                 (magic-link, no password) and mint a key from{' '}
-                <Link href="/account" className="text-brand-600 hover:underline">
+                <Link href="/dashboard" className="text-brand-600 hover:underline">
                   /account
                 </Link>
                 .

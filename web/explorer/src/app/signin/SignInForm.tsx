@@ -65,7 +65,7 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
       // Full-page navigation so the freshly-set session cookie applies
       // and the cookie-authed dashboard renders signed in.
       setState({ kind: 'success' });
-      window.location.assign('/account');
+      window.location.assign('/dashboard');
     } catch (err) {
       const detail =
         err instanceof ApiError
