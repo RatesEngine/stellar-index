@@ -191,7 +191,7 @@ compute-completeness catch-up finishes to avoid stacking lake I/O.
 | P3-4 | **Cross-region Postgres replication** verify (Patroni standby R2/R3 ← R1) | L4.17 | 🔴 |
 | P3-5 | **Region-failover chaos test** | L5.8 | 🔴 |
 | P3-6 | **Multi-region cutover runbook execution** | `multi-region-cutover.md` | 🔴 [OPS] |
-| P3-7 | **Redis Sentinel ansible sub-role** + fix ha-plan §3.4 Cluster/Sentinel contradiction | ADR-0024 / Task #72 | 🔴 [code] |
+| P3-7 | **Redis Sentinel ansible sub-role** + fix ha-plan §3.4 Cluster/Sentinel contradiction | ADR-0024 / Task #72 | ✅ **done (verified 2026-06-30)** — the `redis-sentinel` role is fully built (16 files: redis.conf/sentinel.conf/users.acl templates, install/configure/systemd/firewall/monitoring tasks, 568 task-lines) and ha-plan §3.4 was amended 2026-05-01 + ratified by ADR-0024. The `🔴 [code]` was stale. Remaining is operator deploy of the role onto the R2/R3 cache hosts (gated on P3-1/P3-2 provisioning). |
 
 ---
 

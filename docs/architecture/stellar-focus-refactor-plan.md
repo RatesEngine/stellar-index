@@ -1,6 +1,10 @@
 # Stellar-focus refactor plan
 
-> **Status:** Proposed. No code changes yet.
+> **Status:** Largely shipped (updated 2026-06-30). Units A (explorer UI),
+> B (API `?network=` collapse), and C (`reference_only` flag) are
+> **done + pushed**; Unit D (Tier-3 wire-shape collapse, a SemVer-major
+> change) remains. The original "Proposed, no code yet" header was a
+> stale point-in-time snapshot.
 > **Date:** 2026-06-16
 > **Author:** cold-audit synthesis (4 parallel auditors: API+wire+SDK,
 > currency+aggregate+storage, explorer UI, docs+branding).
