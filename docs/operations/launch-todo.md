@@ -46,6 +46,16 @@ alarm; P0-3 code done (operator purchase pending).
 | P0-6 | **`nft-drop` syslog spam** — ~10k dropped-packet lines / 200k. | [code] | ✅ **DONE** — rsyslog routes `nft-drop` to a logrotated `/var/log/nft-drop.log` and stops (off syslog). Safe (no firewall edit). |
 | P0-7 | **Source-catalogue: `massive` missing from `/v1/sources`** | [code] | ✅ **DONE** — bridged the active FX feed `massive` (the `internal/sources/forex` worker, `fx_quotes` path) into `external.Registry` as an external FX source. Now visible in `/v1/sources` + correctly `IsOnChain=false` (fixed a latent bug where it fell through to on-chain). `coinmarketcap`/`cryptocompare`/`polygon-forex`/`exchangeratesapi` confirmed as intentionally-present disabled **paid** connectors (honest catalogue). Needs an API deploy to show live. |
 
+### Steady-state — "never behind" guarantee
+- ✅ **Data-freshness watchdog DONE + LIVE** (`data-freshness.{sh,timer}`, 15-min):
+  emits per-domain ingest-freshness + the per-source ADR-0033 verdict to the
+  node_exporter textfile collector; 3 alerts + runbooks deployed to r1
+  Prometheus. Closes the gap that let coingecko rot 11d / sep1 never populate /
+  the verdict go 21d stale, all unnoticed. Verified end-to-end: coingecko alert
+  is `pending` (will fire). Plus the completeness verdict is now self-maintaining
+  (Phase B, rc.149) + on a daily timer. **Result: any source past its cadence, a
+  silent timer, or a real served≠lake gap now pages.**
+
 ### Follow-ups surfaced during P0 (tracked, not blockers)
 - **Completeness verdict false-negative on blend (Phase-B lynchpin) — ✅ DONE +
   VERIFIED (rc.149 deployed).** Root cause: `compute-completeness` (the daily
