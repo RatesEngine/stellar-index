@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Refresh stellar.token_supply — the lake-derived per-token supply
-# (Σmint−Σburn−Σclawback over the certified ClickHouse lake) that backs
-# /v1/assets supply for SEP-41 tokens (the 10k+ Soroban tokens that can't be
-# on an LCM observer watch-list). Two phases:
-#   1. seed supply_flows for the gap [last-seeded+1, tip] in chunks — decode one
-#      row per mint/burn/clawback event from stellar.contract_events (idempotent
-#      via the ReplacingMergeTree key);
-#   2. re-aggregate the FINAL-deduped flows [genesis, tip] into token_supply.
-# Chunked + memory-guarded so the initial catch-up AND the daily steady-state
-# both stay gentle on ClickHouse. Same DSN sourcing as compute-archive-to.sh.
+# Keep stellar.supply_flows complete to tip — the per-token mint/burn/clawback
+# flow set that backs /v1/assets SEP-41 supply (TokenSupply() sums it FINAL
+# on-demand; the 10k+ Soroban tokens can't sit on an LCM observer watch-list).
+#
+# supply_flows is written LIVE by the indexer's decode-at-ingest path AND stays
+# verified-complete vs the lake. This timer is the DEFENSIVE forward-gap-fill: if
+# the live writer ever falls behind, it re-seeds [last-seeded+1, tip] from the
+# certified lake (one decoded row per mint/burn/clawback event, idempotent via
+# the ReplacingMergeTree key). Normally a no-op. Chunked + memory-guarded so a
+# real catch-up stays gentle on ClickHouse. (The stellar.token_supply rollup
+# table is NOT refreshed here — nothing reads it; serving sums supply_flows
+# directly.) Same DSN sourcing as compute-archive-to.sh.
 set -uo pipefail
 . /etc/default/stellarindex
 
@@ -40,9 +42,4 @@ while [ "$FROM" -lt "$TIP" ]; do
     || echo "$(date -u) seed [$FROM,$TO] FAILED" >> "$LOG"
   FROM=$TO
 done
-
-# Phase 2 — aggregate the full FINAL-deduped flows into token_supply.
-echo "$(date -u) aggregating token_supply [2,$TIP]" >> "$LOG"
-"$OPS" ch-supply -config "$CONFIG" -ch-addr "$CHADDR" -from 2 -to "$TIP" -write -final </dev/null >> "$LOG" 2>&1 \
-  && echo "$(date -u) ch-supply refresh DONE (tip=$TIP)" >> "$LOG" \
-  || { echo "$(date -u) ch-supply aggregate FAILED" >> "$LOG"; exit 1; }
+echo "$(date -u) supply_flows seed complete (tip=$TIP)" >> "$LOG"

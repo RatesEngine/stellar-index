@@ -1,13 +1,15 @@
-# systemd unit: ch-supply token_supply refresh.
+# systemd unit: supply_flows gap-fill (SEP-41 supply).
 #
-# Rendered by Ansible. Runs run-ch-supply.sh: seeds the supply_flows gap from
-# the certified ClickHouse lake then re-aggregates stellar.token_supply — the
-# lake-derived per-token supply that backs /v1/assets supply for SEP-41 tokens
-# (the 10k+ Soroban tokens that can't sit on an LCM observer watch-list).
-# Keeps it current so SEP-41 total_supply doesn't go stale.
+# Rendered by Ansible. Runs run-ch-supply.sh: defensive forward-gap-fill of
+# stellar.supply_flows from the certified ClickHouse lake — the per-token
+# mint/burn/clawback set that backs /v1/assets SEP-41 supply (TokenSupply() sums
+# it FINAL on-demand; the 10k+ Soroban tokens can't sit on an LCM observer
+# watch-list). supply_flows is normally kept current by the indexer's live
+# decode-at-ingest path, so this is usually a no-op; it catches the live writer
+# up if it ever falls behind.
 
 [Unit]
-Description=Stellar Index — ch-supply token_supply refresh (daily)
+Description=Stellar Index — supply_flows gap-fill (SEP-41 supply, daily)
 Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/architecture/clickhouse-supply-from-ch.md
 After=network-online.target postgresql.service clickhouse-server.service
 Wants=network-online.target

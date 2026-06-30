@@ -1,8 +1,9 @@
-# systemd timer: daily ch-supply token_supply refresh.
+# systemd timer: daily supply_flows gap-fill (SEP-41 supply).
 #
-# Rendered by Ansible. Companion to ch-supply.service. Keeps the lake-derived
-# per-token supply (token_supply) fresh so SEP-41 token supply on /v1/assets
-# tracks the network instead of freezing at whatever ledger ch-supply last ran.
+# Rendered by Ansible. Companion to ch-supply.service. Defensive backstop that
+# keeps stellar.supply_flows complete to tip so /v1/assets SEP-41 supply (summed
+# from it on-demand) tracks the network even if the live decode-at-ingest writer
+# ever falls behind. Normally a no-op.
 #
 # Time slot: 06:00 UTC + jitter, after compute-completeness (05:30). The seed is
 # chunked + memory-guarded so it never collides with the morning oneshots'
@@ -10,7 +11,7 @@
 # post-outage backlog safely.
 
 [Unit]
-Description=Daily ch-supply token_supply refresh (SEP-41 lake-derived supply)
+Description=Daily supply_flows gap-fill (SEP-41 lake-derived supply)
 Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/architecture/clickhouse-supply-from-ch.md
 
 [Timer]

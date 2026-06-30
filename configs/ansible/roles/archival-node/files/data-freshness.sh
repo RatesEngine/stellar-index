@@ -69,14 +69,17 @@ SELECT 'stellarindex_completeness_incomplete{source="'||source||'"} '||(NOT comp
           FROM completeness_snapshots ORDER BY source, computed_at DESC) s;
 SQL
 
-# token_supply lives in ClickHouse (the lake-derived per-token supply that backs
-# /v1/assets SEP-41 supply) — its freshness is the ch-supply timer's health.
-TS_AGE=$(curl -sS --max-time 15 http://localhost:8123/ --data-binary \
-  "SELECT toUInt64(dateDiff('second', max(computed_at), now())) FROM stellar.token_supply" 2>/dev/null | tr -d '[:space:]')
-if [ -n "$TS_AGE" ]; then
-  printf 'stellarindex_data_freshness_age_seconds{domain="token_supply",source="ch_supply"} %s\n' "$TS_AGE" >> "$TMP"
-  printf 'stellarindex_data_freshness_stale{domain="token_supply",source="ch_supply"} %s\n' \
-    "$([ "$TS_AGE" -gt 129600 ] && echo 1 || echo 0)" >> "$TMP"
+# supply_flows (ClickHouse) is the per-token mint/burn/clawback set that backs
+# /v1/assets SEP-41 supply — TokenSupply() sums it FINAL on-demand, so its
+# freshness IS the served SEP-41 supply's freshness. Live-written by the
+# indexer; if it stalls, served SEP-41 supply goes stale. (Threshold generous —
+# supply events are bursty.)
+SF_AGE=$(curl -sS --max-time 15 http://localhost:8123/ --data-binary \
+  "SELECT toUInt64(dateDiff('second', max(ingested_at), now())) FROM stellar.supply_flows" 2>/dev/null | tr -d '[:space:]')
+if [ -n "$SF_AGE" ]; then
+  printf 'stellarindex_data_freshness_age_seconds{domain="sep41_supply",source="supply_flows"} %s\n' "$SF_AGE" >> "$TMP"
+  printf 'stellarindex_data_freshness_stale{domain="sep41_supply",source="supply_flows"} %s\n' \
+    "$([ "$SF_AGE" -gt 3600 ] && echo 1 || echo 0)" >> "$TMP"
 fi
 
 # node_exporter runs unprivileged — mktemp defaults to 0600, so make the
