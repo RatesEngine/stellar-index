@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/StellarIndex/stellar-index/internal/aggregate"
 	"github.com/StellarIndex/stellar-index/internal/canonical"
 )
 
@@ -645,6 +646,28 @@ func (s *Server) priceFallback(ctx context.Context, asset, quote canonical.Asset
 // price is the X/<peg> VWAP rounded by the implicit assumption peg ≈ $1.
 // SingleSource is whatever the underlying X/<peg> lookup carried.
 func (s *Server) tryStablecoinFiatProxy(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool) {
+	// Self-peg: the asset IS a `crypto:<STABLE>` ticker priced in the
+	// very fiat it tracks (crypto:USDC/fiat:USD, crypto:EURC/fiat:EUR,
+	// …). The aggregator treats these tickers as that fiat
+	// (internal/aggregate/stablecoin.go FiatProxy), so the price is
+	// ≈ 1.0 by the same convention that drives every VWAP. The
+	// classic-issued form (USDC-GA5Z…) is handled by the
+	// usdPeggedClassics walk below; this arm covers the abstract
+	// global-ticker form the catalogue + explorer use, which 404'd
+	// before (no on-chain trades quote crypto:USDC in fiat:USD). A
+	// depeg surfaces via the divergence subsystem, not here — same
+	// flat-$1 peg contract as the classic-peg case (F-1232). Runs
+	// ahead of the fiat:USD guard so it also serves the EUR/MXN pegs.
+	if proxy, isStable := aggregate.FiatProxy(asset); isStable && proxy.Equal(quote) {
+		snap := PriceSnapshot{
+			AssetID:    asset.String(),
+			Quote:      quote.String(),
+			Price:      "1.000000000000",
+			PriceType:  "peg",
+			ObservedAt: time.Now().UTC(),
+		}
+		return snap, nil, true
+	}
 	if quote.Type != canonical.AssetFiat || quote.Code != "USD" {
 		return PriceSnapshot{}, nil, false
 	}

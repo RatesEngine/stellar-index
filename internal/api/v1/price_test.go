@@ -430,6 +430,64 @@ func TestPrice_StablecoinFiatProxy_NonUSDQuoteSkips(t *testing.T) {
 	}
 }
 
+// TestPrice_StablecoinFiatProxy_CryptoTickerSelfPeg pins P2-4(b):
+// the abstract global-ticker form of a stablecoin (crypto:USDC,
+// crypto:EURC) priced in the fiat it tracks must return ~$1, not
+// 404. Pre-fix, /v1/price?asset=crypto:USDC&quote=fiat:USD 404'd
+// because tryStablecoinFiatProxy only recognised the classic-issued
+// peg (USDC-GA5Z…) in usdPeggedClassics — the crypto:<TICKER> form
+// the catalogue + explorer use fell through. The aggregate.FiatProxy
+// arm now covers it (and the EUR/MXN pegs) WITHOUT any operator
+// usd_pegged_classic_assets config, so this server wires none.
+func TestPrice_StablecoinFiatProxy_CryptoTickerSelfPeg(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	srv := v1.New(v1.Options{Prices: reader}) // no USDPeggedClassics
+	ts := startHTTPTest(t, srv.Handler())
+
+	for _, tc := range []struct {
+		asset, quote string
+	}{
+		{"crypto:USDC", "fiat:USD"},
+		{"crypto:USDT", "fiat:USD"},
+		{"crypto:EURC", "fiat:EUR"},
+	} {
+		resp := mustGet(t, ts.URL+"/v1/price?asset="+tc.asset+"&quote="+tc.quote)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s/%s: status = %d, want 200", tc.asset, tc.quote, resp.StatusCode)
+		}
+		var env struct {
+			Data v1.PriceSnapshot `json:"data"`
+		}
+		mustDecode(t, resp, &env)
+		if env.Data.Price != "1.000000000000" {
+			t.Errorf("%s/%s: price = %q, want 1.000000000000", tc.asset, tc.quote, env.Data.Price)
+		}
+		if env.Data.PriceType != "peg" {
+			t.Errorf("%s/%s: price_type = %q, want peg", tc.asset, tc.quote, env.Data.PriceType)
+		}
+		if env.Data.Quote != tc.quote {
+			t.Errorf("%s/%s: quote = %q, want %s", tc.asset, tc.quote, env.Data.Quote, tc.quote)
+		}
+	}
+}
+
+// TestPrice_StablecoinFiatProxy_CrossPegQuoteSkips — the self-peg arm
+// fires ONLY when the requested quote IS the fiat the stablecoin
+// tracks. crypto:USDC priced in fiat:EUR is a real cross-rate (USD→
+// EUR), not a $1 peg, so it must NOT synthesise 1.0 — it falls
+// through to 404 (no cross-rate data wired here). Guards against the
+// FiatProxy arm hiding a genuine FX conversion behind a flat peg.
+func TestPrice_StablecoinFiatProxy_CrossPegQuoteSkips(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	srv := v1.New(v1.Options{Prices: reader})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=crypto:USDC&quote=fiat:EUR")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (USDC/EUR is a cross-rate, not a $1 peg)", resp.StatusCode)
+	}
+}
+
 // stubDivergenceLooker is a minimal v1.DivergenceLooker for tests.
 // firing controls what DivergenceFiringFor returns; err is the
 // surfaced error (nil = clean response).

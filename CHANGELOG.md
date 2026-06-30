@@ -16,6 +16,20 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Stablecoin self-peg pricing for the crypto-ticker form.**
+  `/v1/price?asset=crypto:USDC&quote=fiat:USD` (and the EUR/MXN pegs,
+  `/v1/price/tip`, `/v1/observations`, `/v1/oracle`) now returns the `~$1` peg
+  (`price_type: "peg"`) instead of 404. The classic-issued form
+  (`USDC-GA5Z…`) already resolved via the operator's
+  `usd_pegged_classic_assets` list (F-1232), but the abstract global-ticker
+  form the catalogue + explorer use (`crypto:USDC`, `crypto:EURC`, …) fell
+  through — no on-chain trade quotes `crypto:USDC` in `fiat:USD`.
+  `tryStablecoinFiatProxy` now consults `aggregate.FiatProxy` first: when the
+  asset is a `crypto:<STABLE>` ticker whose peg fiat equals the requested
+  quote, it synthesises `1.0` (consistent with the aggregator's
+  stablecoins-as-fiat policy; a depeg still surfaces via the divergence
+  subsystem). A cross-peg quote (`crypto:USDC/fiat:EUR`) deliberately does NOT
+  fire — that's a real FX cross-rate. (launch-todo P2-4(b).)
 - **SEP-41 token supply now served on `/v1/assets/{id}`.** A Soroban (SEP-41)
   token has no LCM observer supply snapshot unless its contract is on an
   operator watch-list — impractical at 10k+ tokens, so Algorithm 3 produced
