@@ -66,18 +66,27 @@ alarm; P0-3 code done (operator purchase pending).
 root-<2G watchdog (per the 2026-06-11 CH-log root-fill incident). Sequence with
 care; none are instant.
 
-| # | Item | Notes |
-|---|------|-------|
-| P1-1 | **F-1265 — 1-year `prices_1m`/CAGG catch-up backfill** (6–12h). Doc: `backfill-procedure.md §F-1265`. Marked "once before public-flip." | Launch-quality history depth. |
-| P1-2 | **`/v1/tx` `tx_hash_index`** — ordered lookup table + MV + 10.2B-row historical backfill; fixes the ~6s tx lookup. Design: `perf-todo.md §4`. | Forward-fix (table+MV) is cheap; the backfill is the heavy part. |
-| P1-3 | **galexie-archive frozen at 62,249,727** while galexie-live writes a different bucket — periodic live→archive `mc cp` sync (or make walkers read both buckets). Doc: `r1-deployment-state.md`. | **Real ongoing plumbing gap** — verify scope; archive is ~1M ledgers behind live. |
-| P1-4 | **CH Phase 4 — `ch-rebuild-projected`** re-derive projected sources from the lake (clean-slate DELETE+rewrite over 1M-ledger windows), then refresh CAGGs. | Closes the rc.107 mis-keyed-forward data (Phase-4 doc §forward-correctness). |
-| P1-5 | **`ch-supply` partition dedup + re-run** — v1 ran `-final=false`; partitions 25/45/62 duplicated → some tokens supply-inflated. One-time `OPTIMIZE … PARTITION FINAL` off-hours, then re-run `ch-supply -write`. | Supply correctness. |
-| P1-6 | **Broad CAGG recompute** — after retention migrations 0031/0040 removed retention, recompute so older rows materialize. Doc: `cagg-broad-recompute.md` (4–8h, overnight). | Run-once. |
-| P1-7 | **SEP-41 historical counterparty re-derive** — the CAP-67 topic-shape data-loss fix (commit 99d2c2b0) was forward-only; historical mint/clawback counterparties lost since P23 need re-derive from the lake (dispatcher-based). | total_supply undercount until done. |
-| P1-8 | **Data-truth / Phase-C contract-WASM backfill** — pre-62M dormant ledger-entry state (contract code+instances, account/issuer flags, trustline supply) via `state-snapshot -write`. In progress. | DATA-TRUTH-PLAN G1–G3. |
-| P1-9 | **Pre-P20 ClaimAtom + pre-P23 classic-movement coverage** — code-only until backfilled over historical ledgers (coverage-matrix S6.1/S6.2). | Historical completeness caveat. |
-| P1-10 | **CH Phase 8 — decommission** — once Phases 4–7 done: drop `soroban_events`/old `trades`/protocol tables, purge orphan cursors, refactor `internal/projector` to read CH, retire `internal/sources/sorobanevents`. | Final CH-migration step; do LAST. |
+**Verified 2026-06-30 — three of the heaviest items are already DONE** (the
+docs that listed them were point-in-time snapshots). Always verify state before
+running a multi-hour backfill.
+
+| # | Item | Status |
+|---|------|--------|
+| P1-1 | F-1265 1-year `prices_1m`/CAGG backfill | ✅ **DONE** — `prices_1m` + `prices_1d` go back to **2015-11-18** (full history, not just 1yr). Superseded by the migration-0031 retention-removal + CAGG recompute. |
+| P1-2 | **`/v1/tx` `tx_hash_index`** — ordered lookup + MV + 10.2B-row backfill (perf-todo §4). | 🔴 **REAL pending.** Forward-fix (table+MV+reader) is code; the backfill is heavy. **Low launch priority** — the tx pages are noindex (UX latency only). |
+| P1-3 | galexie-archive "frozen at 62.2M" | ✅ **DONE/stale-doc** — archive-completeness daemon verified the archive **current to 63,259,021** today (988,422/988,422 checkpoints), ~10k behind live. `galexie-archive-fill.timer` keeps it synced. |
+| P1-4 | **CH Phase 4 — `ch-rebuild-projected`** re-derive projected sources from the lake. | ❓ **Verify post-catch-up** (closes rc.107 mis-keyed-forward data). CH-heavy. |
+| P1-5 | **`ch-supply` partition dedup + re-run** — v1 ran `-final=false`; partitions 25/45/62 duplicated → some tokens supply-inflated. | 🔴 **REAL pending — launch-relevant** (we serve market-cap/supply). `OPTIMIZE … PARTITION FINAL` + re-run `ch-supply -write`. CH-heavy. |
+| P1-6 | Broad CAGG recompute (after retention migrations) | ✅ **DONE** — the 2015-deep `prices_1m`/`prices_1d` materialization IS this recompute. |
+| P1-7 | **SEP-41 historical counterparty re-derive** — CAP-67 topic-shape loss (commit 99d2c2b0) was forward-only; r1-lake-verified ~99.96% mints + 100% clawbacks lost since P23. | 🔴 **REAL pending — launch-relevant** (total_supply undercount). Dispatcher-based re-derive. |
+| P1-8 | Data-truth / Phase-C contract-WASM backfill (`state-snapshot -write`). | 🟢 **In progress.** |
+| P1-9 | Pre-P20 ClaimAtom + pre-P23 classic-movement coverage. | 🟡 Low-priority historical caveat. |
+| P1-10 | **CH Phase 8 — decommission** — drop `soroban_events`/old tables, refactor projector to read CH. | ⏳ **Do LAST** (gated on P1-4 + Phases 5–7). |
+
+**Net real pending P1:** P1-2 (low launch priority), P1-4 (verify), **P1-5 + P1-7
+(supply correctness — launch-relevant)**, P1-8 (in progress). The supply items
+are the highest-value for launch; both are CH-heavy → run after the
+compute-completeness catch-up finishes to avoid stacking lake I/O.
 
 ---
 
