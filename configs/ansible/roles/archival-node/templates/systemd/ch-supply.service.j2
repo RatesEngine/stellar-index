@@ -1,0 +1,40 @@
+# systemd unit: ch-supply token_supply refresh.
+#
+# Rendered by Ansible. Runs run-ch-supply.sh: seeds the supply_flows gap from
+# the certified ClickHouse lake then re-aggregates stellar.token_supply — the
+# lake-derived per-token supply that backs /v1/assets supply for SEP-41 tokens
+# (the 10k+ Soroban tokens that can't sit on an LCM observer watch-list).
+# Keeps it current so SEP-41 total_supply doesn't go stale.
+
+[Unit]
+Description=Stellar Index — ch-supply token_supply refresh (daily)
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/architecture/clickhouse-supply-from-ch.md
+After=network-online.target postgresql.service clickhouse-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/ch-supply
+EnvironmentFile=-/etc/default/stellarindex
+
+Environment=CONFIG_PATH=/etc/stellarindex.toml
+Environment=CH_ADDR=127.0.0.1:9300
+Environment=CHSUPPLY_CHUNK=25000
+
+ExecStart=/usr/local/sbin/run-ch-supply.sh
+
+User=root
+Group=root
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# First run catches up [62.94M, tip] (the seed gap) + a full aggregate; cap
+# generously. Steady-state runs seed one day + re-aggregate in minutes.
+TimeoutStartSec=240min
+
+[Install]
+WantedBy=multi-user.target

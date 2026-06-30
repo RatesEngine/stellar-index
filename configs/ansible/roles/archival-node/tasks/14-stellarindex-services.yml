@@ -245,6 +245,17 @@
     group: root
     mode: "0755"
 
+- name: Install run-ch-supply.sh driver (lake-derived token_supply refresh)
+  # ch-supply.service runs this: seeds supply_flows for the gap from the CH lake
+  # then re-aggregates token_supply — the lake-derived per-token supply that
+  # backs /v1/assets SEP-41 supply. Seed is chunked + memory-guarded.
+  ansible.builtin.copy:
+    src: run-ch-supply.sh
+    dest: /usr/local/sbin/run-ch-supply.sh
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install verify-archive-tier-a / archive-completeness / supply-snapshot / galexie-archive-trim units
   ansible.builtin.template:
     src: "systemd/{{ item }}.j2"
@@ -265,6 +276,8 @@
     - compute-completeness.timer
     - data-freshness.service
     - data-freshness.timer
+    - ch-supply.service
+    - ch-supply.timer
   notify: Reload systemd
 
 - name: Enable + start verify-archive / completeness / supply-snapshot timers
@@ -286,6 +299,7 @@
     - sep1-refresh.timer
     - compute-completeness.timer
     - data-freshness.timer
+    - ch-supply.timer
 
 # ──── Tier D weekly cron (multi-peer fork-detection) ──────────────────
 # Per ADR-0016 §7.4: each region runs verify-archive Tier D weekly to
