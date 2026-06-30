@@ -1,0 +1,20 @@
+# systemd timer: data-freshness watchdog, every 15 minutes.
+#
+# Rendered by Ansible. Companion to data-freshness.service. 15 min is frequent
+# enough that the freshness gauges + completeness-verdict gauges are never more
+# than a quarter-hour behind reality, so an alert that needs a 30-60 min `for:`
+# still fires promptly. Persistent=false — freshness is point-in-time; a missed
+# tick is recomputed at the next one, no catch-up needed.
+
+[Unit]
+Description=Stellar Index — data-freshness watchdog (every 15 min)
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/data-source-stale.md
+
+[Timer]
+OnCalendar=*:0/15
+RandomizedDelaySec=30
+Persistent=false
+Unit=data-freshness.service
+
+[Install]
+WantedBy=timers.target

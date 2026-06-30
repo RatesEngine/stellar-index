@@ -1,0 +1,68 @@
+groups:
+  - name: data-freshness
+    rules:
+      # The "never get behind" alert. Fires when any data domain/source is
+      # staler than its expected cadence — the gap that let coingecko rot 11
+      # days + sep1 metadata never populate, both unnoticed. Emitted by
+      # data-freshness.sh (textfile collector, every 15 min).
+      - alert: stellarindex_data_source_stale
+        expr: |
+          stellarindex_data_freshness_stale == 1
+        for: 1h
+        labels:
+          severity: ticket
+          team: stellarindex
+          component: data-freshness
+          runbook_url: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/data-source-stale.md
+        annotations:
+          summary: "Data source {{ $labels.domain }}/{{ $labels.source }} is stale"
+          description: |
+            stellarindex_data_freshness_stale{domain="{{ $labels.domain }}",source="{{ $labels.source }}"} = 1
+            — no fresh rows for {{ $labels.domain }}/{{ $labels.source }} beyond its expected
+            cadence. A feed died (e.g. coingecko hit its API quota), a poller wedged, or a
+            writer/timer stopped. The age is on
+            stellarindex_data_freshness_age_seconds{domain="{{ $labels.domain }}",source="{{ $labels.source }}"}.
+
+            Runbook: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/data-source-stale.md
+
+      # A source no longer reconciles to the certified lake. Now that the
+      # ADR-0033 verdict is trustworthy + self-maintaining (rc.149), a
+      # complete=false means a REAL served<>lake gap to re-derive.
+      - alert: stellarindex_completeness_incomplete
+        expr: |
+          stellarindex_completeness_incomplete == 1
+        for: 1h
+        labels:
+          severity: ticket
+          team: stellarindex
+          component: completeness
+          runbook_url: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/completeness-incomplete.md
+        annotations:
+          summary: "Source {{ $labels.source }} failed the ADR-0033 completeness verdict"
+          description: |
+            stellarindex_completeness_incomplete{source="{{ $labels.source }}"} = 1 — the served
+            tier no longer reconciles to the certified ClickHouse lake for {{ $labels.source }}
+            (latest verdict complete=false). A real served<>lake gap. Re-derive that source from
+            the lake, then re-verify with compute-completeness.
+
+            Runbook: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/completeness-incomplete.md
+
+      # The watchdog that catches every other staleness is itself dark.
+      - alert: stellarindex_data_freshness_watchdog_silent
+        expr: |
+          absent_over_time(stellarindex_data_freshness_stale[45m])
+        for: 15m
+        labels:
+          severity: ticket
+          team: stellarindex
+          component: data-freshness
+          runbook_url: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/data-freshness-watchdog-silent.md
+        annotations:
+          summary: "data-freshness watchdog stopped emitting"
+          description: |
+            stellarindex_data_freshness_stale has been absent > 45m — data-freshness.timer
+            hasn't refreshed its textfile, so the watchdog that backstops coingecko/sep1/
+            verdict staleness is blind. Check `systemctl status data-freshness.service` +
+            its last journal on r1.
+
+            Runbook: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/data-freshness-watchdog-silent.md

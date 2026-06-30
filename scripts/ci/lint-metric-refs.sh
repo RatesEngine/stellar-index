@@ -41,7 +41,9 @@ RULE_DIRS=(
 )
 
 # Directories scanned for emitters (Go Name: fields + textfile .prom + shell).
-EMITTER_PATHS=(internal cmd scripts configs/healthchecks)
+# configs/ansible/.../files holds the textfile-collector emitter scripts
+# (data-freshness.sh, galexie-archive-tip-lag.sh, …) that write .prom gauges.
+EMITTER_PATHS=(internal cmd scripts configs/healthchecks configs/ansible/roles/archival-node/files)
 
 # Deliberately-inert references: kept in the rule files (with an INERT
 # comment) but no producer exists / not applicable on this host. Keep

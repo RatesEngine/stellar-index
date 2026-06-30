@@ -182,6 +182,21 @@ node_exporter textfile_collector reads
 `/var/lib/node_exporter/textfile_collector/galexie_archive_tip_lag.prom`,
 refreshed every 5 min by `galexie-archive-tip-lag.timer`.
 
+## Data-freshness / completeness alerts
+
+The "never get behind" watchdog. `data-freshness.sh` (every 15 min via
+`data-freshness.timer`) emits per-domain ingest-freshness gauges + the per-source
+ADR-0033 completeness verdict to the node_exporter textfile collector
+(`data_freshness.prom`). Covers what the gap detector doesn't: reference oracles,
+FX, supply, the issuer-metadata cron, and the verdict itself — the gaps that let
+coingecko rot 11 days and sep1 metadata never populate, both unnoticed.
+
+| Name | Metric | Condition | Severity | Runbook |
+| ---- | ------ | --------- | -------- | ------- |
+| `stellarindex_data_source_stale` | `stellarindex_data_freshness_stale{domain,source}` | == 1 for > 1h | P3 | [data-source-stale](runbooks/data-source-stale.md) |
+| `stellarindex_completeness_incomplete` | `stellarindex_completeness_incomplete{source}` | == 1 for > 1h | P3 | [completeness-incomplete](runbooks/completeness-incomplete.md) |
+| `stellarindex_data_freshness_watchdog_silent` | `absent_over_time(stellarindex_data_freshness_stale[45m])` | for > 15m | P3 | [data-freshness-watchdog-silent](runbooks/data-freshness-watchdog-silent.md) |
+
 ## Ledgerstream tier alerts
 
 Per [ADR-0027](../adr/0027-lcm-cache-tiering.md). R1's

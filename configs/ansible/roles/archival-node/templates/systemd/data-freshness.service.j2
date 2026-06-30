@@ -1,0 +1,38 @@
+# systemd unit: data-freshness watchdog (node_exporter textfile emit).
+#
+# Rendered by Ansible. Runs data-freshness.sh every timer tick to emit
+# per-domain ingest-freshness + per-source completeness-verdict gauges into the
+# node_exporter textfile collector. The "never get behind" signal — closes the
+# gap that let coingecko rot 11 days + the completeness verdict 21 days unnoticed.
+
+[Unit]
+Description=Stellar Index — data-freshness watchdog (textfile emit)
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/data-source-stale.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/data-freshness
+EnvironmentFile=-/etc/default/stellarindex
+Environment=TEXTFILE_OUTPUT=/var/lib/node_exporter/textfile_collector/data_freshness.prom
+
+ExecStart=/usr/local/sbin/data-freshness.sh
+
+User=root
+Group=root
+
+# Read-only except the textfile collector dir it writes the .prom to.
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+
+# A few cheap grouped queries; cap so a wedged DB can't pin the unit.
+TimeoutStartSec=2min
+
+[Install]
+WantedBy=multi-user.target

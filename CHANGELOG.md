@@ -16,6 +16,19 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Data-freshness watchdog — the "never get behind" alert.** New
+  `data-freshness.sh` (every 15 min via `data-freshness.timer`) emits per-domain
+  ingest-freshness gauges (`stellarindex_data_freshness_{age_seconds,stale}`) AND
+  the per-source ADR-0033 completeness verdict
+  (`stellarindex_completeness_incomplete`) to the node_exporter textfile
+  collector, with three alerts (`stellarindex_data_source_stale`,
+  `stellarindex_completeness_incomplete`,
+  `stellarindex_data_freshness_watchdog_silent`) + runbooks. Closes the gap the
+  audit found: the ingest gap-detector covered on-chain source gaps, but
+  reference oracles, FX, supply, the issuer-metadata cron, and the verdict itself
+  had no freshness alert — so coingecko rotted 11 days and sep1 metadata never
+  populated, unnoticed. Now any source past its cadence, or a real served≠lake
+  gap, pages. (launch-todo steady-state / "never behind".)
 - **`massive` FX feed registered as an external source.** The active fiat-FX
   feed (`internal/sources/forex` worker, massive.com = Polygon's backend,
   `fx_quotes` path) was missing from `external.Registry`, so it never appeared
