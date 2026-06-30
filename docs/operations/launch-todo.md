@@ -47,17 +47,21 @@ alarm; P0-3 code done (operator purchase pending).
 | P0-7 | **Source-catalogue: `massive` missing from `/v1/sources`** | [code] | ✅ **DONE** — bridged the active FX feed `massive` (the `internal/sources/forex` worker, `fx_quotes` path) into `external.Registry` as an external FX source. Now visible in `/v1/sources` + correctly `IsOnChain=false` (fixed a latent bug where it fell through to on-chain). `coinmarketcap`/`cryptocompare`/`polygon-forex`/`exchangeratesapi` confirmed as intentionally-present disabled **paid** connectors (honest catalogue). Needs an API deploy to show live. |
 
 ### Follow-ups surfaced during P0 (tracked, not blockers)
-- **Completeness verdict false-negative on blend (Phase-B lynchpin) — ✅ FIXED
-  (rc.149, deploy pending).** Root cause: `compute-completeness` (the daily
+- **Completeness verdict false-negative on blend (Phase-B lynchpin) — ✅ DONE +
+  VERIFIED (rc.149 deployed).** Root cause: `compute-completeness` (the daily
   verdict) never called `preseedFactoryChildren` — only `verify-reconciliation`
   did. So its factory-gated childgates were the static `protocol_contracts`
   seed and went STALE as new pools deployed; blend's recent activity was on
   pools missing from the seed → `expected=0` while the live (self-seeding)
   decoder captured them (served correct). Fix: `compute-completeness` now
-  preseeds factory children from the creation events `[genesis, lo)` before each
-  re-derive — making the watchdog **self-maintaining** as pools deploy. Validate
-  on r1 (blend → `complete=true`) after the ops deploy, then the verdict is
-  fully trustworthy → drives Phase C.
+  preseeds factory children from the creation events before each re-derive —
+  making the watchdog **self-maintaining** as pools deploy. **Verified on r1:
+  blend → `complete=true`; the full verdict is now 15/15 green.**
+- **SEP-41 is EXCLUDED from the verdict** (the `event_index` PK-collapse, per
+  the reconcile-catalogue comment) — so "15/15 green" does NOT cover SEP-41.
+  Bringing SEP-41 into the reconcile is part of Phase C / P1-7: fix the PK so it
+  can be reconciled, then re-derive the historical loss, then it joins the
+  certificate. Until then, SEP-41 completeness is unverified by the watchdog.
 - **FX-path debt** — the X2.5 triangulation forex-snap (`FXQuoteAtOrBefore`) reads the **`trades`** table filtered by `FXSources()` (the disabled connector-path sources), so it *always* soft-falls-back (`AggregatorFXSnapFallbackTotal`). The active FX feed `massive` writes **`fx_quotes`**, a different table. Unify the two FX paths — point the snap at `fx_quotes`, or collapse the redundant `massive`↔`polygon-forex` (same upstream provider). Low impact today (only non-USD-fiat-quoted pairs hit an FX leg).
 - **ZFS-dataset drift** — `data/{clickhouse,loki,pgbackrest}` exist on r1 but aren't in the Ansible `zfs_datasets` defaults — reconcile in a dedicated pass.
 
