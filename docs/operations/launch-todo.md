@@ -47,17 +47,17 @@ alarm; P0-3 code done (operator purchase pending).
 | P0-7 | **Source-catalogue: `massive` missing from `/v1/sources`** | [code] | ✅ **DONE** — bridged the active FX feed `massive` (the `internal/sources/forex` worker, `fx_quotes` path) into `external.Registry` as an external FX source. Now visible in `/v1/sources` + correctly `IsOnChain=false` (fixed a latent bug where it fell through to on-chain). `coinmarketcap`/`cryptocompare`/`polygon-forex`/`exchangeratesapi` confirmed as intentionally-present disabled **paid** connectors (honest catalogue). Needs an API deploy to show live. |
 
 ### Follow-ups surfaced during P0 (tracked, not blockers)
-- **Completeness checker `-ch` false-negative on blend (Phase-B lynchpin)** —
-  the verdict flags `blend complete=false` (`blend_auctions`/`positions`/
-  `emissions`: `expected=0` vs `served=13/1883/12`). CONFIRMED a checker bug,
-  not a real gap: `blend_positions` IS event-derived (`blend.position` event →
-  sink); the CH lake's `contract_events` is **current to tip with 4.7M events
-  in the window**; re-running gives the same `expected=0`. **Only blend** fails
-  (14/15 sources reconcile `complete=true` via `-ch`). Likely a
-  contract-identity-form mismatch in blend's `-ch` factory-gate re-derive
-  (childgate vs the lake's `contract_id_hex`). Served blend data is correct.
-  Must fix so `complete=false` always means a real served≠lake gap (the
-  watchdog the resync keys off).
+- **Completeness verdict false-negative on blend (Phase-B lynchpin) — ✅ FIXED
+  (rc.149, deploy pending).** Root cause: `compute-completeness` (the daily
+  verdict) never called `preseedFactoryChildren` — only `verify-reconciliation`
+  did. So its factory-gated childgates were the static `protocol_contracts`
+  seed and went STALE as new pools deployed; blend's recent activity was on
+  pools missing from the seed → `expected=0` while the live (self-seeding)
+  decoder captured them (served correct). Fix: `compute-completeness` now
+  preseeds factory children from the creation events `[genesis, lo)` before each
+  re-derive — making the watchdog **self-maintaining** as pools deploy. Validate
+  on r1 (blend → `complete=true`) after the ops deploy, then the verdict is
+  fully trustworthy → drives Phase C.
 - **FX-path debt** — the X2.5 triangulation forex-snap (`FXQuoteAtOrBefore`) reads the **`trades`** table filtered by `FXSources()` (the disabled connector-path sources), so it *always* soft-falls-back (`AggregatorFXSnapFallbackTotal`). The active FX feed `massive` writes **`fx_quotes`**, a different table. Unify the two FX paths — point the snap at `fx_quotes`, or collapse the redundant `massive`↔`polygon-forex` (same upstream provider). Low impact today (only non-USD-fiat-quoted pairs hit an FX leg).
 - **ZFS-dataset drift** — `data/{clickhouse,loki,pgbackrest}` exist on r1 but aren't in the Ansible `zfs_datasets` defaults — reconcile in a dedicated pass.
 
