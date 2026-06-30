@@ -1,0 +1,53 @@
+# systemd unit: SEP-1 issuer-metadata refresh.
+#
+# Rendered by Ansible. Resolves each issuer's home_domain stellar.toml and
+# writes org_name + org_verified back to issuers.sep1_payload (bidirectional
+# verification, #46 / rc.147). Failed fetches bump sep1_resolved_at so the
+# ~43k dead-domain issuers don't clog the front of the refresh queue.
+#
+# Without this timer the refresh only ran when invoked by hand, so issuer
+# org metadata (the /v1/issuers org_name + verified badge) never populated at
+# scale. Runs once per timer tick (oneshot); the timer schedules the cadence.
+
+[Unit]
+Description=Stellar Index — SEP-1 issuer-metadata refresh (daily)
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/internal/metadata/doc.go
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/sep1-refresh
+EnvironmentFile=-/etc/default/stellarindex
+
+# Defaults. Operators override via /etc/default/sep1-refresh.
+Environment=CONFIG_PATH=/etc/stellarindex.toml
+Environment=LIMIT=500
+Environment=OLDER_THAN=24h
+Environment=RUN_TIMEOUT=10m
+Environment=EXTRA_FLAGS=
+
+ExecStart=/usr/local/bin/stellarindex-ops sep1-refresh \
+  -config ${CONFIG_PATH} \
+  -limit ${LIMIT} \
+  -older-than ${OLDER_THAN} \
+  -timeout ${RUN_TIMEOUT} \
+  ${EXTRA_FLAGS}
+
+# Runs as root for consistency with the stellarindex-* daemons (F-1205).
+User=root
+Group=root
+
+# Read-only filesystem — the refresh only reads config + writes to Postgres.
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# The binary's own -timeout caps the run; give systemd a little more headroom.
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

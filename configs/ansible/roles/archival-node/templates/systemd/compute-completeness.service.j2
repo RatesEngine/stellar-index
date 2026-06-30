@@ -1,0 +1,50 @@
+# systemd unit: ADR-0033 completeness-verdict refresh.
+#
+# Rendered by Ansible. Runs run-compute-completeness.sh (a self-chunking
+# per-source driver) once per timer tick. Keeps `completeness_snapshots` —
+# the authoritative "100% confidence in 100% coverage" verdict — fresh
+# instead of frozen at whatever ledger the last manual run reached.
+#
+# Per ADR-0033 + ADR-0034 (-ch reads the certified ClickHouse lake, off the
+# serving Postgres). The driver chunks at 25k ledgers so the high-volume SDEX
+# projection reconcile never blows ClickHouse's 12 GiB per-query limit.
+
+[Unit]
+Description=Stellar Index — ADR-0033 completeness-verdict refresh (daily)
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/architecture/completeness-verification.md
+After=network-online.target postgresql.service clickhouse-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/compute-completeness
+EnvironmentFile=-/etc/default/stellarindex
+
+# Defaults. Operators override via /etc/default/compute-completeness.
+Environment=CONFIG_PATH=/etc/stellarindex.toml
+Environment=CH_ADDR=127.0.0.1:9300
+Environment=COMPLETENESS_CHUNK=25000
+
+ExecStart=/usr/local/sbin/run-compute-completeness.sh
+
+# Runs as root for consistency with the stellarindex-* daemons (the in-repo
+# unit set User=stellarindex but r1 has no such user yet — F-1205).
+User=root
+Group=root
+
+# Read-only most of the filesystem; the driver writes nothing to disk (it
+# talks to Postgres + ClickHouse over the loopback only).
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# The first run (17-21 day catch-up) walks ~313k ledgers per source in 25k
+# chunks; cap generously. Steady-state ticks are one ~daily chunk and finish
+# in minutes.
+TimeoutStartSec=180min
+
+[Install]
+WantedBy=multi-user.target

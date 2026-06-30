@@ -222,6 +222,18 @@
     group: root
     mode: "0755"
 
+- name: Install run-compute-completeness.sh driver (ADR-0033 verdict refresh)
+  # compute-completeness.service runs this self-chunking per-source driver:
+  # it walks each source's [watermark, tip] in 25k-ledger windows so the
+  # SDEX projection reconcile never blows ClickHouse's 12 GiB query limit,
+  # and never regresses an already-ahead source's watermark.
+  ansible.builtin.copy:
+    src: run-compute-completeness.sh
+    dest: /usr/local/sbin/run-compute-completeness.sh
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install verify-archive-tier-a / archive-completeness / supply-snapshot / galexie-archive-trim units
   ansible.builtin.template:
     src: "systemd/{{ item }}.j2"
@@ -236,6 +248,10 @@
     - supply-snapshot.timer
     - galexie-archive-trim.service
     - galexie-archive-trim.timer
+    - sep1-refresh.service
+    - sep1-refresh.timer
+    - compute-completeness.service
+    - compute-completeness.timer
   notify: Reload systemd
 
 - name: Enable + start verify-archive / completeness / supply-snapshot timers
@@ -254,6 +270,8 @@
     - verify-archive-tier-a.timer
     - archive-completeness.timer
     - supply-snapshot.timer
+    - sep1-refresh.timer
+    - compute-completeness.timer
 
 # ──── Tier D weekly cron (multi-peer fork-detection) ──────────────────
 # Per ADR-0016 §7.4: each region runs verify-archive Tier D weekly to

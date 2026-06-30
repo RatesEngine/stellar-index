@@ -1,0 +1,23 @@
+# systemd timer: daily ADR-0033 completeness-verdict refresh.
+#
+# Rendered by Ansible. Companion to compute-completeness.service. Without this
+# timer the verdict (`completeness_snapshots`) only advances when an operator
+# runs it by hand — it had drifted 17-21 days stale before this landed.
+#
+# Time slot: 05:30 UTC + up to 5 min jitter. After supply-snapshot (04:42)
+# and sep1-refresh (05:12) so the morning oneshots don't all land at once.
+# Persistent=true: if the box was off at 05:30, fire on next boot — and the
+# driver's per-source chunking absorbs the larger post-outage window safely.
+
+[Unit]
+Description=Daily ADR-0033 completeness-verdict refresh
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/architecture/completeness-verification.md
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=compute-completeness.service
+
+[Install]
+WantedBy=timers.target

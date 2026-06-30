@@ -16,6 +16,20 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Two missing cron timers — `sep1-refresh` + `compute-completeness`.** Neither
+  had ever existed as a systemd timer, so both data sets silently froze: issuer
+  `org_name`/`org_verified` only updated on a manual `sep1-refresh`, and the
+  ADR-0033 completeness verdict (`completeness_snapshots`) had drifted **17–21
+  days** stale (watermarks at ~63.0M while the network was at 63.27M). New
+  Ansible templates under the archival-node role install both (daily, 05:12 /
+  05:30 UTC). The completeness timer runs `run-compute-completeness.sh` — a
+  self-chunking **per-source** driver: it walks each source's
+  `[watermark, tip]` in 25k-ledger windows because (a) the watermark write
+  overwrites rather than `max()`s, so a global run would regress sources already
+  ahead, and (b) the high-volume SDEX projection reconcile blows ClickHouse's
+  12 GiB per-query limit above ~30k ledgers. Self-healing: any backlog (initial
+  catch-up or post-outage) is chunked automatically. Phase-0 of the launch
+  to-do (`docs/operations/launch-todo.md`).
 - **Bidirectional SEP-1 org verification (`org_verified`).** `/v1/issuers`
   now carries `org_verified` — true only when the issuer's `home_domain`
   `stellar.toml` lists THIS issuer's account back in its `[[CURRENCIES]]`

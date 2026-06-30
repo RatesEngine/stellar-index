@@ -1,0 +1,22 @@
+# systemd timer: daily SEP-1 issuer-metadata refresh.
+#
+# Rendered by Ansible. Companion to sep1-refresh.service. This is the cron
+# that previously never existed — issuer org_name / org_verified only updated
+# on a manual run, so the /v1/issuers metadata went stale.
+#
+# Time slot: 05:12 UTC + up to 5 min jitter. Between supply-snapshot (04:42)
+# and compute-completeness (05:30). Persistent=true so a reboot doesn't skip
+# a day's refresh.
+
+[Unit]
+Description=Daily SEP-1 issuer-metadata refresh
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/internal/metadata/doc.go
+
+[Timer]
+OnCalendar=*-*-* 05:12:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=sep1-refresh.service
+
+[Install]
+WantedBy=timers.target
