@@ -44,6 +44,14 @@ not-a-bug. Only genuine residual = the CoinGecko purchase (operator action).
 | P0-7 | **Source-catalogue: `massive` missing from `/v1/sources`** | [code] | ✅ **DONE** — bridged the active FX feed `massive` (the `internal/sources/forex` worker, `fx_quotes` path) into `external.Registry` as an external FX source. Now visible in `/v1/sources` + correctly `IsOnChain=false` (fixed a latent bug where it fell through to on-chain). `coinmarketcap`/`cryptocompare`/`polygon-forex`/`exchangeratesapi` confirmed as intentionally-present disabled **paid** connectors (honest catalogue). Needs an API deploy to show live. |
 
 ### Follow-ups surfaced during P0 (tracked, not blockers)
+- **Completeness checker false-negative on blend** — the now-running
+  `compute-completeness` reconcile flags `blend` `complete=false`
+  (`blend_auctions`/`blend_positions`/`blend_emissions`: `expected=0` from the
+  event-lake re-derive vs `served=13/1675/6`). These three are
+  **state-snapshot-derived** (ADR-0039 contract-state reader), NOT
+  `soroban_events`-projected — so the checker shouldn't reconcile them against
+  the event lake. The served blend data is present + correct; this is a checker
+  source-classification refinement, not a data gap. (Surfaced by P0-2.)
 - **FX-path debt** — the X2.5 triangulation forex-snap (`FXQuoteAtOrBefore`) reads the **`trades`** table filtered by `FXSources()` (the disabled connector-path sources), so it *always* soft-falls-back (`AggregatorFXSnapFallbackTotal`). The active FX feed `massive` writes **`fx_quotes`**, a different table. Unify the two FX paths — point the snap at `fx_quotes`, or collapse the redundant `massive`↔`polygon-forex` (same upstream provider). Low impact today (only non-USD-fiat-quoted pairs hit an FX leg).
 - **ZFS-dataset drift** — `data/{clickhouse,loki,pgbackrest}` exist on r1 but aren't in the Ansible `zfs_datasets` defaults — reconcile in a dedicated pass.
 
