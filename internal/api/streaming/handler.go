@@ -2,12 +2,36 @@ package streaming
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// streamWriteDeadline bounds a single SSE write. It's rolled forward
+// before every write, so a healthy stream (which writes a heartbeat every
+// HeartbeatInterval < this) never trips it, but a STALLED write — a
+// non-reading or zero-window client — fails after this long, letting the
+// handler return and free its goroutine/conn/FD (CS-013). Must be > the
+// heartbeat interval so a slow-but-alive client isn't killed.
+const streamWriteDeadline = 25 * time.Second
+
+// maxConcurrentStreams caps simultaneous SSE connections across all stream
+// endpoints, so a flood of connections can't exhaust file descriptors /
+// goroutines (CS-013 / F4). Generous by default (legit fan-out is small on
+// a single host); tune via SetMaxConcurrentStreams. <= 0 disables the cap.
+var maxConcurrentStreams int64 = 8192
+
+var activeStreams int64
+
+// SetMaxConcurrentStreams overrides the global concurrent-SSE-connection
+// cap. Pass <= 0 to disable. Call once at startup.
+func SetMaxConcurrentStreams(n int64) { atomic.StoreInt64(&maxConcurrentStreams, n) }
+
+// ActiveStreams reports the current number of open SSE connections (for
+// diagnostics / a gauge).
+func ActiveStreams() int64 { return atomic.LoadInt64(&activeStreams) }
 
 // DefaultHeartbeatInterval is the cadence at which Stream emits
 // SSE comment heartbeats (`:keepalive\n\n`) when no real events are
@@ -63,36 +87,37 @@ func StreamFromChannel(w http.ResponseWriter, r *http.Request, ch <-chan Event, 
 		return
 	}
 
-	// F-1228 (codex audit-2026-05-12): the API's http.Server is
-	// configured with `WriteTimeout: 30s` to keep short-running
-	// handlers honest. That deadline ALSO applies to SSE streams,
-	// so without an explicit override the kernel resets the
-	// connection at 30s elapsed — well below the 60s reverse-proxy
-	// idle timeout these heartbeats are designed to dodge.
+	// Concurrent-stream cap (CS-013): refuse new connections past the
+	// ceiling so a connection flood can't exhaust FDs/goroutines.
+	if cap := atomic.LoadInt64(&maxConcurrentStreams); cap > 0 {
+		if atomic.AddInt64(&activeStreams, 1) > cap {
+			atomic.AddInt64(&activeStreams, -1)
+			http.Error(w, "too many concurrent streams", http.StatusServiceUnavailable)
+			return
+		}
+		defer atomic.AddInt64(&activeStreams, -1)
+	} else {
+		atomic.AddInt64(&activeStreams, 1)
+		defer atomic.AddInt64(&activeStreams, -1)
+	}
+
+	// F-1228 + CS-013: the API's http.Server sets `WriteTimeout: 30s` to
+	// keep short handlers honest, but that fixed deadline would reset an
+	// SSE stream at 30s. The old fix cleared the deadline entirely
+	// (`SetWriteDeadline(zero)`), which let a stalled write block FOREVER
+	// — a non-reading client leaked its goroutine/conn/FD indefinitely.
+	// Instead we ROLL a per-write deadline forward before every write
+	// (see setWriteDeadline). A healthy stream heartbeats within the
+	// window and never trips it; a stalled write fails after
+	// streamWriteDeadline and the handler returns + cleans up.
 	//
-	// http.NewResponseController + SetWriteDeadline(zero-Time)
-	// clears the per-connection deadline for THIS request only,
-	// leaving the global WriteTimeout in place for every other
-	// handler. The request context (which has the cleanup hooks
-	// for cancellation) is unaffected.
-	//
-	// On wrappers that don't expose SetWriteDeadline through the
-	// Unwrap chain (httptest writers, middleware ResponseWriters
-	// without an Unwrap method) the call returns
-	// http.ErrNotSupported — which we tolerate, because those
-	// transports don't enforce the per-write deadline that this
-	// fix counters either. The middleware chain in cmd/stellarindex-
-	// api/main.go exposes Unwrap() on every wrapper so production
-	// SSE connections do reach this seam.
+	// On transports that don't expose SetWriteDeadline (httptest writers,
+	// wrappers without Unwrap) the call returns http.ErrNotSupported,
+	// which we ignore — those transports don't enforce write deadlines
+	// anyway. Production wrappers all expose Unwrap().
 	rc := http.NewResponseController(w)
-	if err := rc.SetWriteDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
-		// Anything other than "transport doesn't support it"
-		// would mask a regression silently — log + continue, but
-		// don't 500 because the stream is still serviceable
-		// (worst case: it closes at the global WriteTimeout).
-		// Writing as an SSE comment line so the connection isn't
-		// broken; errors from this write are themselves swallowed.
-		_, _ = fmt.Fprintf(w, ":sse-write-deadline-reset-error: %s\n\n", err.Error())
+	setWriteDeadline := func() {
+		_ = rc.SetWriteDeadline(time.Now().Add(streamWriteDeadline))
 	}
 
 	// SSE headers per WHATWG. Setting these BEFORE WriteHeader so
@@ -119,6 +144,7 @@ func StreamFromChannel(w http.ResponseWriter, r *http.Request, ch <-chan Event, 
 	// immediately rather than waiting for the first event. Some
 	// clients deadlock if the server hasn't written headers + flushed
 	// before they time out.
+	setWriteDeadline()
 	if _, err := fmt.Fprint(w, ":connected\n\n"); err != nil {
 		return
 	}
@@ -135,11 +161,13 @@ func StreamFromChannel(w http.ResponseWriter, r *http.Request, ch <-chan Event, 
 				// resume.
 				return
 			}
+			setWriteDeadline()
 			if err := WriteFrame(w, ev); err != nil {
 				return
 			}
 			flusher.Flush()
 		case <-ticker.C:
+			setWriteDeadline()
 			if _, err := fmt.Fprint(w, ":keepalive\n\n"); err != nil {
 				return
 			}

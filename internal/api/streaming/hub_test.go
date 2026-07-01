@@ -255,3 +255,64 @@ func TestHub_PublishRaceFreeIDs(t *testing.T) {
 		t.Errorf("unique IDs = %d, want %d", len(seen), goroutines*perG)
 	}
 }
+
+// TestHub_PublishVsCancelRace pins CS-012: a subscriber cancelling (which
+// closes its channel) concurrently with Publish (which sends off the topic
+// lock) must never panic with "send on closed channel". Before the fix,
+// the select send-case on a closed channel was "ready" and chosen over
+// default, crashing the whole process. Run under -race.
+func TestHub_PublishVsCancelRace(t *testing.T) {
+	hub := streaming.NewHub(0)
+	const workers = 8
+	const iters = 500
+
+	var wg sync.WaitGroup
+	// Publishers hammer the topic continuously.
+	stop := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					hub.Publish("race:topic", "x", []byte("payload"))
+				}
+			}
+		}()
+	}
+
+	// Churners subscribe + cancel repeatedly, racing the close against the
+	// publishers' sends. A drained-slowly channel also exercises the
+	// full->drop path.
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iters; j++ {
+				ch, cancel := hub.Subscribe([]string{"race:topic"}, "")
+				// Read a couple so the queue can fill on some iterations.
+				select {
+				case <-ch:
+				default:
+				}
+				cancel()
+				// Draining after cancel must not panic either.
+				for range ch {
+				}
+			}
+		}()
+	}
+
+	// Let the churners finish, then stop publishers.
+	go func() {
+		// crude join: wait until all churner goroutines are done by
+		// sleeping proportional to work, then stop.
+		time.Sleep(2 * time.Second)
+		close(stop)
+	}()
+	wg.Wait()
+	// If we got here without a panic, the race is fixed.
+}

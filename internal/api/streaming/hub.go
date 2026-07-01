@@ -92,9 +92,13 @@ func (h *Hub) Publish(topic, eventType string, data []byte) string {
 	t.mu.Unlock()
 
 	for _, s := range subs {
-		select {
-		case s.ch <- ev:
-		default:
+		// trySend is guarded by the subscription's own mutex, so it can
+		// never race with a concurrent close() (CS-012): a send on a
+		// closed channel panics and would crash the whole process, and
+		// the send here is deliberately off the topic lock, so a
+		// cancel()/drop on another goroutine (or another topic, for a
+		// multi-topic sub) could otherwise close sub.ch mid-send.
+		if full := s.trySend(ev); full {
 			h.dropSubscriber(topic, s)
 		}
 	}
@@ -132,7 +136,7 @@ func (h *Hub) Subscribe(topics []string, lastEventID string) (<-chan Event, func
 				// Replay overflowed the subscriber queue. Close +
 				// signal — the client sees an immediate drop and
 				// can reconnect with a more recent Last-Event-ID.
-				close(sub.ch)
+				sub.close()
 				return sub.ch, func() {}
 			}
 		}
@@ -165,12 +169,16 @@ func (h *Hub) dropSubscriber(topic string, sub *subscription) {
 		return
 	}
 	t.mu.Lock()
-	if _, present := t.subs[sub]; present {
+	_, present := t.subs[sub]
+	if present {
 		delete(t.subs, sub)
-		// Close exactly once — guarded by sub.closeOnce.
-		sub.closeOnce.Do(func() { close(sub.ch) })
 	}
 	t.mu.Unlock()
+	// Close outside the topic lock; sub.close() is idempotent and
+	// mutually exclusive with trySend via the subscription's own mutex.
+	if present {
+		sub.close()
+	}
 }
 
 // getOrCreateTopic returns the topicState for `name`, creating it
@@ -199,8 +207,43 @@ func (h *Hub) getOrCreateTopic(name string) *topicState {
 }
 
 // subscription is one active stream's per-Hub state.
+//
+// mu serializes trySend against close so a publisher can never send on a
+// channel a concurrent cancel/drop has closed (CS-012 — send-on-closed
+// panics and crashes the process). It is held only for a non-blocking
+// select, so contention is negligible.
 type subscription struct {
-	ch        chan Event
-	topics    []string
-	closeOnce sync.Once
+	ch     chan Event
+	topics []string
+
+	mu     sync.Mutex
+	closed bool
+}
+
+// trySend delivers ev to the subscriber without blocking. It returns
+// full=true when the subscriber's queue is full (caller should drop it).
+// A closed subscription is a no-op (returns full=false) — never a panic.
+func (s *subscription) trySend(ev Event) (full bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	select {
+	case s.ch <- ev:
+		return false
+	default:
+		return true
+	}
+}
+
+// close closes the subscriber channel exactly once. Idempotent and
+// mutually exclusive with trySend.
+func (s *subscription) close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		close(s.ch)
+	}
 }
