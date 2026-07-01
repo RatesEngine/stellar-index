@@ -60,8 +60,17 @@ export function Callout({
     bad: 'border-bad-300 bg-bad-50 text-bad-900',
     ok: 'border-ok-300 bg-ok-50 text-ok-700',
   }[tone];
+  // LC-052: announce to assistive tech. bad/warn are errors → assertive
+  // role=alert (interrupts); ok/info are status → polite. Callouts that
+  // render dynamically after a form submit (sign-in, key create/revoke) are
+  // now spoken instead of silently appearing.
+  const urgent = tone === 'bad' || tone === 'warn';
   return (
-    <div className={cn('rounded-lg border px-4 py-3 text-sm', tones, className)}>
+    <div
+      role={urgent ? 'alert' : 'status'}
+      aria-live={urgent ? 'assertive' : 'polite'}
+      className={cn('rounded-lg border px-4 py-3 text-sm', tones, className)}
+    >
       {title && <div className="mb-0.5 font-semibold">{title}</div>}
       {children}
     </div>

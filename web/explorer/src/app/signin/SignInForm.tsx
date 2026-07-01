@@ -105,7 +105,7 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
         </label>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700">
+          <div role="alert" className="flex items-start gap-2 rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -159,7 +159,7 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
       </label>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700">
+        <div role="alert" className="flex items-start gap-2 rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>

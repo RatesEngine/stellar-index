@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, TrendingUp, X } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+
+import { useDialog } from '@/lib/useDialog';
 
 import { DegradedBanner } from './DegradedBanner';
 import { Sidebar, SidebarNav } from './Sidebar';
@@ -21,16 +23,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setDrawer(false);
   }, [pathname]);
-  // Escape closes the mobile drawer — keyboard users otherwise have to
-  // Tab to the close button.
-  useEffect(() => {
-    if (!drawer) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawer(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [drawer]);
+  // LC-051: the mobile drawer is the primary mobile nav — give it the full
+  // modal contract (Escape + focus trap + focus move-in/restore), not just
+  // Escape. The shared hook handles all of it.
+  const closeDrawer = useCallback(() => setDrawer(false), []);
+  const drawerRef = useDialog<HTMLDivElement>(drawer, closeDrawer);
 
   if (pathname?.startsWith('/embed/')) return <>{children}</>;
 
@@ -73,8 +70,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             aria-hidden
           />
           <div
+            ref={drawerRef}
             id="mobile-nav-drawer"
-            className="absolute left-0 top-0 h-full w-72 max-w-[85vw] border-r border-line shadow-elevated"
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation"
+            className="absolute left-0 top-0 h-full w-72 max-w-[85vw] border-r border-line bg-surface shadow-elevated outline-none"
           >
             <button
               type="button"

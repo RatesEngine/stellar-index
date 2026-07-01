@@ -1,10 +1,11 @@
 'use client';
 
 import { Check, Code2, Copy, ExternalLink, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 import type { RequestExample } from '@/api/client';
+import { useDialog } from '@/lib/useDialog';
 
 export type RequestRevealProps = {
   example: RequestExample;
@@ -29,6 +30,9 @@ export function RequestReveal({
 }: RequestRevealProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<'curl' | 'url' | null>(null);
+  // LC-050: Escape + focus-trap + focus move-in/restore for the dialog.
+  const close = useCallback(() => setOpen(false), []);
+  const dialogRef = useDialog<HTMLDivElement>(open, close);
 
   // Reset the "Copied!" indicator after a short pause so multiple
   // copies in quick succession each show the green check.
@@ -63,15 +67,20 @@ export function RequestReveal({
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-4 sm:items-center"
           onClick={() => setOpen(false)}
-          role="dialog"
-          aria-modal
         >
           <div
-            className="w-full max-w-2xl rounded-lg bg-surface p-6 shadow-2xl"
+            ref={dialogRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-reveal-title"
+            className="w-full max-w-2xl rounded-lg bg-surface p-6 shadow-2xl outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="mb-4 flex items-center justify-between">
-              <h3 className="font-medium">API request</h3>
+              <h3 id="request-reveal-title" className="font-medium">
+                API request
+              </h3>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
