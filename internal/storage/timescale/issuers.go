@@ -12,9 +12,13 @@ import (
 // `issuers` table. Auth flags are pointers so callers can
 // distinguish "we know the value" from "no observation yet."
 type IssuerRow struct {
-	GStrkey        string
-	HomeDomain     string
-	OrgName        string // sep1_payload->>'OrgName' — empty when SEP-1 not fetched
+	GStrkey    string
+	HomeDomain string
+	OrgName    string // sep1_payload->>'OrgName' — empty when SEP-1 not fetched
+	// OrgVerified is true only when the SEP-1 toml's [[CURRENCIES]] lists this
+	// issuer back (bidirectional proof). Without it, OrgName is issuer-self-
+	// declared and must NOT be rendered as authoritative (CS-100 impersonation).
+	OrgVerified    bool
 	AuthRequired   *bool
 	AuthRevocable  *bool
 	AuthImmutable  *bool
@@ -32,6 +36,7 @@ func (s *Store) GetIssuer(ctx context.Context, gStrkey string) (IssuerRow, error
 		    g_strkey,
 		    COALESCE(home_domain, ''),
 		    COALESCE(sep1_payload->>'OrgName', '') AS org_name,
+		    COALESCE((sep1_payload->>'OrgVerified')::boolean, false) AS org_verified,
 		    auth_required,
 		    auth_revocable,
 		    auth_immutable,
@@ -54,6 +59,7 @@ func (s *Store) GetIssuer(ctx context.Context, gStrkey string) (IssuerRow, error
 		&row.GStrkey,
 		&row.HomeDomain,
 		&row.OrgName,
+		&row.OrgVerified,
 		&authReq, &authRev, &authImm, &authClb,
 		&resolvedAt, &payload, &creation,
 	)

@@ -10649,7 +10649,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"g_strkey\": \"<string>\",\n    \"home_domain\": \"<string>\",\n    \"org_name\": \"<string>\",\n    \"auth_required\": \"<boolean>\",\n    \"auth_revocable\": \"<boolean>\",\n    \"auth_immutable\": \"<boolean>\",\n    \"auth_clawback\": \"<boolean>\",\n    \"sep1_resolved_at\": \"<dateTime>\",\n    \"sep1_payload\": {\n      \"key_0\": \"string\",\n      \"key_1\": 7499.0893341600895\n    },\n    \"creation_ledger\": \"<integer>\",\n    \"assets\": [\n      {\n        \"asset_id\": \"<string>\",\n        \"code\": \"<string>\",\n        \"slug\": \"<string>\",\n        \"first_seen_ledger\": \"<integer>\",\n        \"last_seen_ledger\": \"<integer>\",\n        \"observation_count\": \"<long>\"\n      },\n      {\n        \"asset_id\": \"<string>\",\n        \"code\": \"<string>\",\n        \"slug\": \"<string>\",\n        \"first_seen_ledger\": \"<integer>\",\n        \"last_seen_ledger\": \"<integer>\",\n        \"observation_count\": \"<long>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"g_strkey\": \"<string>\",\n    \"home_domain\": \"<string>\",\n    \"org_name\": \"<string>\",\n    \"org_verified\": \"<boolean>\",\n    \"auth_required\": \"<boolean>\",\n    \"auth_revocable\": \"<boolean>\",\n    \"auth_immutable\": \"<boolean>\",\n    \"auth_clawback\": \"<boolean>\",\n    \"sep1_resolved_at\": \"<dateTime>\",\n    \"sep1_payload\": {\n      \"key_0\": 6201.445520855486\n    },\n    \"creation_ledger\": \"<integer>\",\n    \"assets\": [\n      {\n        \"asset_id\": \"<string>\",\n        \"code\": \"<string>\",\n        \"slug\": \"<string>\",\n        \"first_seen_ledger\": \"<integer>\",\n        \"last_seen_ledger\": \"<integer>\",\n        \"observation_count\": \"<long>\"\n      },\n      {\n        \"asset_id\": \"<string>\",\n        \"code\": \"<string>\",\n        \"slug\": \"<string>\",\n        \"first_seen_ledger\": \"<integer>\",\n        \"last_seen_ledger\": \"<integer>\",\n        \"observation_count\": \"<long>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -11082,7 +11082,7 @@
                           "value": "application/json"
                         }
                       ],
-                      "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"contract_id\": \"<string>\",\n    \"count\": \"<integer>\",\n    \"limit\": \"<integer>\",\n    \"transfers\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"ledger_close_time\": \"<dateTime>\",\n        \"event_kind\": \"transfer\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"from\": \"<string>\",\n        \"to\": \"<string>\",\n        \"amount\": \"<string>\",\n        \"live_until_ledger\": \"<integer>\",\n        \"authorized\": \"<boolean>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"ledger_close_time\": \"<dateTime>\",\n        \"event_kind\": \"set_admin\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"from\": \"<string>\",\n        \"to\": \"<string>\",\n        \"amount\": \"<string>\",\n        \"live_until_ledger\": \"<integer>\",\n        \"authorized\": \"<boolean>\"\n      }\n    ],\n    \"from\": \"<string>\",\n    \"to\": \"<string>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                      "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"contract_id\": \"<string>\",\n    \"count\": \"<integer>\",\n    \"limit\": \"<integer>\",\n    \"transfers\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"ledger_close_time\": \"<dateTime>\",\n        \"event_kind\": \"set_authorized\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"from\": \"<string>\",\n        \"to\": \"<string>\",\n        \"amount\": \"<string>\",\n        \"live_until_ledger\": \"<integer>\",\n        \"authorized\": \"<boolean>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"ledger_close_time\": \"<dateTime>\",\n        \"event_kind\": \"approve\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"from\": \"<string>\",\n        \"to\": \"<string>\",\n        \"amount\": \"<string>\",\n        \"live_until_ledger\": \"<integer>\",\n        \"authorized\": \"<boolean>\"\n      }\n    ],\n    \"from\": \"<string>\",\n    \"to\": \"<string>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                       "cookie": [],
                       "_postman_previewlanguage": "json"
                     },
@@ -12649,7 +12649,7 @@
                       "variable": [
                         {
                           "type": "any",
-                          "value": "pair",
+                          "value": "protocol",
                           "key": "entity_type",
                           "disabled": false,
                           "description": {
@@ -12701,7 +12701,7 @@
                                 "type": "text/plain"
                               },
                               "type": "any",
-                              "value": "pair",
+                              "value": "protocol",
                               "key": "entity_type"
                             },
                             {
@@ -12733,7 +12733,7 @@
                           "value": "application/json"
                         }
                       ],
-                      "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"entity_type\": \"<string>\",\n    \"entity_id\": \"<string>\",\n    \"refreshed_at\": \"<dateTime>\",\n    \"current_value\": \"<number>\",\n    \"h1_value\": \"<number>\",\n    \"h1_delta_pct\": \"<number>\",\n    \"h24_value\": \"<number>\",\n    \"h24_delta_pct\": \"<number>\",\n    \"d7_value\": \"<number>\",\n    \"d7_delta_pct\": \"<number>\",\n    \"d30_value\": \"<number>\",\n    \"d30_delta_pct\": \"<number>\",\n    \"ath_value\": \"<number>\",\n    \"ath_at\": \"<dateTime>\",\n    \"atl_value\": \"<number>\",\n    \"atl_at\": \"<dateTime>\",\n    \"streak_direction\": \"flat\",\n    \"streak_days\": \"<integer>\",\n    \"acceleration\": \"decreasing\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                      "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"entity_type\": \"<string>\",\n    \"entity_id\": \"<string>\",\n    \"refreshed_at\": \"<dateTime>\",\n    \"current_value\": \"<number>\",\n    \"h1_value\": \"<number>\",\n    \"h1_delta_pct\": \"<number>\",\n    \"h24_value\": \"<number>\",\n    \"h24_delta_pct\": \"<number>\",\n    \"d7_value\": \"<number>\",\n    \"d7_delta_pct\": \"<number>\",\n    \"d30_value\": \"<number>\",\n    \"d30_delta_pct\": \"<number>\",\n    \"ath_value\": \"<number>\",\n    \"ath_at\": \"<dateTime>\",\n    \"atl_value\": \"<number>\",\n    \"atl_at\": \"<dateTime>\",\n    \"streak_direction\": \"up\",\n    \"streak_days\": \"<integer>\",\n    \"acceleration\": \"increasing\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                       "cookie": [],
                       "_postman_previewlanguage": "json"
                     },
@@ -12758,7 +12758,7 @@
                                 "type": "text/plain"
                               },
                               "type": "any",
-                              "value": "pair",
+                              "value": "protocol",
                               "key": "entity_type"
                             },
                             {
@@ -12815,7 +12815,7 @@
                                 "type": "text/plain"
                               },
                               "type": "any",
-                              "value": "pair",
+                              "value": "protocol",
                               "key": "entity_type"
                             },
                             {
@@ -12872,7 +12872,7 @@
                                 "type": "text/plain"
                               },
                               "type": "any",
-                              "value": "pair",
+                              "value": "protocol",
                               "key": "entity_type"
                             },
                             {
@@ -12965,7 +12965,7 @@
                                 "type": "text/plain"
                               },
                               "type": "any",
-                              "value": "pair",
+                              "value": "protocol",
                               "key": "entity_type"
                             },
                             {
@@ -13022,7 +13022,7 @@
                                 "type": "text/plain"
                               },
                               "type": "any",
-                              "value": "pair",
+                              "value": "protocol",
                               "key": "entity_type"
                             },
                             {
@@ -13102,7 +13102,7 @@
                         "type": "text/plain"
                       },
                       "key": "status",
-                      "value": "stale"
+                      "value": "active"
                     },
                     {
                       "disabled": false,
@@ -13155,7 +13155,7 @@
                             "type": "text/plain"
                           },
                           "key": "status",
-                          "value": "stale"
+                          "value": "active"
                         },
                         {
                           "disabled": false,
@@ -13218,7 +13218,7 @@
                             "type": "text/plain"
                           },
                           "key": "status",
-                          "value": "stale"
+                          "value": "active"
                         },
                         {
                           "disabled": false,
@@ -13269,7 +13269,7 @@
                             "type": "text/plain"
                           },
                           "key": "status",
-                          "value": "stale"
+                          "value": "active"
                         },
                         {
                           "disabled": false,
@@ -13368,7 +13368,7 @@
                             "type": "text/plain"
                           },
                           "key": "status",
-                          "value": "stale"
+                          "value": "active"
                         },
                         {
                           "disabled": false,
@@ -13431,7 +13431,7 @@
                             "type": "text/plain"
                           },
                           "key": "status",
-                          "value": "stale"
+                          "value": "active"
                         },
                         {
                           "disabled": false,
@@ -13731,7 +13731,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"incidents\": [\n      {\n        \"slug\": \"<string>\",\n        \"title\": \"<string>\",\n        \"severity\": \"SEV-2\",\n        \"status\": \"investigating\",\n        \"started_at\": \"<dateTime>\",\n        \"body_markdown\": \"<string>\",\n        \"resolved_at\": \"<dateTime>\",\n        \"affected_components\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"postmortem\": \"<string>\"\n      },\n      {\n        \"slug\": \"<string>\",\n        \"title\": \"<string>\",\n        \"severity\": \"SEV-2\",\n        \"status\": \"monitoring\",\n        \"started_at\": \"<dateTime>\",\n        \"body_markdown\": \"<string>\",\n        \"resolved_at\": \"<dateTime>\",\n        \"affected_components\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"postmortem\": \"<string>\"\n      }\n    ],\n    \"count\": \"<integer>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"incidents\": [\n      {\n        \"slug\": \"<string>\",\n        \"title\": \"<string>\",\n        \"severity\": \"SEV-3\",\n        \"status\": \"identified\",\n        \"started_at\": \"<dateTime>\",\n        \"body_markdown\": \"<string>\",\n        \"resolved_at\": \"<dateTime>\",\n        \"affected_components\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"postmortem\": \"<string>\"\n      },\n      {\n        \"slug\": \"<string>\",\n        \"title\": \"<string>\",\n        \"severity\": \"SEV-2\",\n        \"status\": \"identified\",\n        \"started_at\": \"<dateTime>\",\n        \"body_markdown\": \"<string>\",\n        \"resolved_at\": \"<dateTime>\",\n        \"affected_components\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"postmortem\": \"<string>\"\n      }\n    ],\n    \"count\": \"<integer>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
               "cookie": [],
               "_postman_previewlanguage": "json"
             },
@@ -14024,7 +14024,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": {\n    \"protocols\": [\n      {\n        \"name\": \"<string>\",\n        \"category\": \"dex\",\n        \"description\": \"<string>\",\n        \"genesis_ledger\": \"<long>\",\n        \"factories\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"contract_count\": \"<integer>\",\n        \"events_24h\": \"<long>\",\n        \"completeness\": {\n          \"complete\": \"<boolean>\",\n          \"watermark_ledger\": \"<long>\"\n        }\n      },\n      {\n        \"name\": \"<string>\",\n        \"category\": \"dex\",\n        \"description\": \"<string>\",\n        \"genesis_ledger\": \"<long>\",\n        \"factories\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"contract_count\": \"<integer>\",\n        \"events_24h\": \"<long>\",\n        \"completeness\": {\n          \"complete\": \"<boolean>\",\n          \"watermark_ledger\": \"<long>\"\n        }\n      }\n    ],\n    \"total_protocols\": \"<integer>\"\n  }\n}",
+              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": {\n    \"protocols\": [\n      {\n        \"name\": \"<string>\",\n        \"category\": \"yield\",\n        \"description\": \"<string>\",\n        \"genesis_ledger\": \"<long>\",\n        \"factories\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"contract_count\": \"<integer>\",\n        \"events_24h\": \"<long>\",\n        \"completeness\": {\n          \"complete\": \"<boolean>\",\n          \"watermark_ledger\": \"<long>\"\n        }\n      },\n      {\n        \"name\": \"<string>\",\n        \"category\": \"lending\",\n        \"description\": \"<string>\",\n        \"genesis_ledger\": \"<long>\",\n        \"factories\": [\n          \"<string>\",\n          \"<string>\"\n        ],\n        \"contract_count\": \"<integer>\",\n        \"events_24h\": \"<long>\",\n        \"completeness\": {\n          \"complete\": \"<boolean>\",\n          \"watermark_ledger\": \"<long>\"\n        }\n      }\n    ],\n    \"total_protocols\": \"<integer>\"\n  }\n}",
               "cookie": [],
               "_postman_previewlanguage": "json"
             }
@@ -14121,7 +14121,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": {\n    \"category\": \"amm\",\n    \"contract_count\": \"<integer>\",\n    \"contracts\": [\n      {\n        \"contract_id\": \"<string>\",\n        \"factory_id\": \"<string>\",\n        \"first_ledger\": \"<long>\",\n        \"token0\": \"<string>\",\n        \"token1\": \"<string>\",\n        \"kind\": \"instance\",\n        \"events\": \"<long>\",\n        \"last_seen\": \"<dateTime>\"\n      },\n      {\n        \"contract_id\": \"<string>\",\n        \"factory_id\": \"<string>\",\n        \"first_ledger\": \"<long>\",\n        \"token0\": \"<string>\",\n        \"token1\": \"<string>\",\n        \"kind\": \"factory\",\n        \"events\": \"<long>\",\n        \"last_seen\": \"<dateTime>\"\n      }\n    ],\n    \"description\": \"<string>\",\n    \"event_kinds\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"events_24h\": \"<long>\",\n    \"factories\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"genesis_ledger\": \"<long>\",\n    \"name\": \"<string>\",\n    \"completeness\": {\n      \"complete\": \"<boolean>\",\n      \"watermark_ledger\": \"<long>\"\n    },\n    \"verification_page\": \"<string>\",\n    \"activity_window_days\": \"<integer>\",\n    \"events_total\": \"<long>\",\n    \"event_breakdown\": [\n      {\n        \"event_type\": \"<string>\",\n        \"count\": \"<long>\"\n      },\n      {\n        \"event_type\": \"<string>\",\n        \"count\": \"<long>\"\n      }\n    ],\n    \"activity_series\": [\n      {\n        \"date\": \"<string>\",\n        \"events\": \"<long>\"\n      },\n      {\n        \"date\": \"<string>\",\n        \"events\": \"<long>\"\n      }\n    ]\n  }\n}",
+                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": {\n    \"category\": \"dex\",\n    \"contract_count\": \"<integer>\",\n    \"contracts\": [\n      {\n        \"contract_id\": \"<string>\",\n        \"factory_id\": \"<string>\",\n        \"first_ledger\": \"<long>\",\n        \"token0\": \"<string>\",\n        \"token1\": \"<string>\",\n        \"kind\": \"instance\",\n        \"events\": \"<long>\",\n        \"last_seen\": \"<dateTime>\"\n      },\n      {\n        \"contract_id\": \"<string>\",\n        \"factory_id\": \"<string>\",\n        \"first_ledger\": \"<long>\",\n        \"token0\": \"<string>\",\n        \"token1\": \"<string>\",\n        \"kind\": \"factory\",\n        \"events\": \"<long>\",\n        \"last_seen\": \"<dateTime>\"\n      }\n    ],\n    \"description\": \"<string>\",\n    \"event_kinds\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"events_24h\": \"<long>\",\n    \"factories\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"genesis_ledger\": \"<long>\",\n    \"name\": \"<string>\",\n    \"completeness\": {\n      \"complete\": \"<boolean>\",\n      \"watermark_ledger\": \"<long>\"\n    },\n    \"verification_page\": \"<string>\",\n    \"activity_window_days\": \"<integer>\",\n    \"events_total\": \"<long>\",\n    \"event_breakdown\": [\n      {\n        \"event_type\": \"<string>\",\n        \"count\": \"<long>\"\n      },\n      {\n        \"event_type\": \"<string>\",\n        \"count\": \"<long>\"\n      }\n    ],\n    \"activity_series\": [\n      {\n        \"date\": \"<string>\",\n        \"events\": \"<long>\"\n      },\n      {\n        \"date\": \"<string>\",\n        \"events\": \"<long>\"\n      }\n    ]\n  }\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -14875,7 +14875,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"version\": \"<string>\",\n    \"aggregation\": {\n      \"price_method\": \"vwap\",\n      \"outlier_filter\": {\n        \"default_sigma\": \"<number>\",\n        \"endpoint\": \"<string>\",\n        \"note\": \"<string>\"\n      },\n      \"stablecoin_fiat_proxy\": [\n        {\n          \"asset_id\": \"<string>\",\n          \"pegs_to\": \"<string>\"\n        },\n        {\n          \"asset_id\": \"<string>\",\n          \"pegs_to\": \"<string>\"\n        }\n      ],\n      \"closed_bucket_window_seconds\": \"<integer>\"\n    },\n    \"source_classes\": [\n      {\n        \"name\": \"lending\",\n        \"contributes_to_vwap\": \"<boolean>\",\n        \"description\": \"<string>\"\n      },\n      {\n        \"name\": \"oracle\",\n        \"contributes_to_vwap\": \"<boolean>\",\n        \"description\": \"<string>\"\n      }\n    ],\n    \"sources\": [\n      {\n        \"name\": \"<string>\",\n        \"class\": \"exchange\",\n        \"include_in_vwap\": \"<boolean>\",\n        \"paid\": \"<boolean>\",\n        \"backfill_available\": \"<boolean>\",\n        \"backfill_safe\": \"<boolean>\",\n        \"default_weight\": \"<integer>\",\n        \"on_chain\": \"<boolean>\",\n        \"subclass\": \"cex\",\n        \"trade_count_24h\": \"<integer>\"\n      },\n      {\n        \"name\": \"<string>\",\n        \"class\": \"aggregator\",\n        \"include_in_vwap\": \"<boolean>\",\n        \"paid\": \"<boolean>\",\n        \"backfill_available\": \"<boolean>\",\n        \"backfill_safe\": \"<boolean>\",\n        \"default_weight\": \"<integer>\",\n        \"on_chain\": \"<boolean>\",\n        \"subclass\": \"dex\",\n        \"trade_count_24h\": \"<integer>\"\n      }\n    ],\n    \"references\": [\n      {\n        \"id\": \"<string>\",\n        \"title\": \"<string>\",\n        \"url\": \"<string>\"\n      },\n      {\n        \"id\": \"<string>\",\n        \"title\": \"<string>\",\n        \"url\": \"<string>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"version\": \"<string>\",\n    \"aggregation\": {\n      \"price_method\": \"vwap\",\n      \"outlier_filter\": {\n        \"default_sigma\": \"<number>\",\n        \"endpoint\": \"<string>\",\n        \"note\": \"<string>\"\n      },\n      \"stablecoin_fiat_proxy\": [\n        {\n          \"asset_id\": \"<string>\",\n          \"pegs_to\": \"<string>\"\n        },\n        {\n          \"asset_id\": \"<string>\",\n          \"pegs_to\": \"<string>\"\n        }\n      ],\n      \"closed_bucket_window_seconds\": \"<integer>\"\n    },\n    \"source_classes\": [\n      {\n        \"name\": \"aggregator\",\n        \"contributes_to_vwap\": \"<boolean>\",\n        \"description\": \"<string>\"\n      },\n      {\n        \"name\": \"exchange\",\n        \"contributes_to_vwap\": \"<boolean>\",\n        \"description\": \"<string>\"\n      }\n    ],\n    \"sources\": [\n      {\n        \"name\": \"<string>\",\n        \"class\": \"exchange\",\n        \"include_in_vwap\": \"<boolean>\",\n        \"paid\": \"<boolean>\",\n        \"backfill_available\": \"<boolean>\",\n        \"backfill_safe\": \"<boolean>\",\n        \"default_weight\": \"<integer>\",\n        \"on_chain\": \"<boolean>\",\n        \"subclass\": \"cex\",\n        \"trade_count_24h\": \"<integer>\"\n      },\n      {\n        \"name\": \"<string>\",\n        \"class\": \"exchange\",\n        \"include_in_vwap\": \"<boolean>\",\n        \"paid\": \"<boolean>\",\n        \"backfill_available\": \"<boolean>\",\n        \"backfill_safe\": \"<boolean>\",\n        \"default_weight\": \"<integer>\",\n        \"on_chain\": \"<boolean>\",\n        \"subclass\": \"cex\",\n        \"trade_count_24h\": \"<integer>\"\n      }\n    ],\n    \"references\": [\n      {\n        \"id\": \"<string>\",\n        \"title\": \"<string>\",\n        \"url\": \"<string>\"\n      },\n      {\n        \"id\": \"<string>\",\n        \"title\": \"<string>\",\n        \"url\": \"<string>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
               "cookie": [],
               "_postman_previewlanguage": "json"
             },
@@ -14948,7 +14948,7 @@
                     "type": "text/plain"
                   },
                   "key": "class",
-                  "value": "aggregator"
+                  "value": "authority_sanity"
                 },
                 {
                   "disabled": false,
@@ -14991,7 +14991,7 @@
                         "type": "text/plain"
                       },
                       "key": "class",
-                      "value": "aggregator"
+                      "value": "authority_sanity"
                     },
                     {
                       "disabled": false,
@@ -15022,7 +15022,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"name\": \"<string>\",\n      \"class\": \"oracle\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"on_chain\": \"<boolean>\",\n      \"subclass\": \"fx\",\n      \"trade_count_24h\": \"<integer>\"\n    },\n    {\n      \"name\": \"<string>\",\n      \"class\": \"oracle\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"on_chain\": \"<boolean>\",\n      \"subclass\": \"fx\",\n      \"trade_count_24h\": \"<integer>\"\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+              "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"name\": \"<string>\",\n      \"class\": \"exchange\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"on_chain\": \"<boolean>\",\n      \"subclass\": \"fx\",\n      \"trade_count_24h\": \"<integer>\"\n    },\n    {\n      \"name\": \"<string>\",\n      \"class\": \"oracle\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"on_chain\": \"<boolean>\",\n      \"subclass\": \"fx\",\n      \"trade_count_24h\": \"<integer>\"\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
               "cookie": [],
               "_postman_previewlanguage": "json"
             },
@@ -15044,7 +15044,7 @@
                         "type": "text/plain"
                       },
                       "key": "class",
-                      "value": "aggregator"
+                      "value": "authority_sanity"
                     },
                     {
                       "disabled": false,
@@ -15097,7 +15097,7 @@
                         "type": "text/plain"
                       },
                       "key": "class",
-                      "value": "aggregator"
+                      "value": "authority_sanity"
                     },
                     {
                       "disabled": false,
@@ -15186,7 +15186,7 @@
                         "type": "text/plain"
                       },
                       "key": "class",
-                      "value": "aggregator"
+                      "value": "authority_sanity"
                     },
                     {
                       "disabled": false,
@@ -15530,7 +15530,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"key_id\": \"<string>\",\n    \"label\": \"<string>\",\n    \"key_prefix\": \"<string>\",\n    \"tier\": \"partner\",\n    \"rate_limit_per_min\": \"<integer>\",\n    \"created_at\": \"<dateTime>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"key_id\": \"<string>\",\n    \"label\": \"<string>\",\n    \"key_prefix\": \"<string>\",\n    \"tier\": \"apikey\",\n    \"rate_limit_per_min\": \"<integer>\",\n    \"created_at\": \"<dateTime>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 }
@@ -15754,7 +15754,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": [\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"key_prefix\": \"<string>\",\n      \"tier\": \"partner\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    },\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"key_prefix\": \"<string>\",\n      \"tier\": \"partner\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    }\n  ]\n}",
+                  "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false,\n    \"unverified_ticker_collision\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": [\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"key_prefix\": \"<string>\",\n      \"tier\": \"partner\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    },\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"key_prefix\": \"<string>\",\n      \"tier\": \"anonymous\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    }\n  ]\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -17221,7 +17221,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"plaintext\": \"<string>\",\n  \"key\": {\n    \"id\": \"<string>\",\n    \"name\": \"<string>\",\n    \"key_prefix\": \"<string>\",\n    \"tier\": \"operator\",\n    \"rate_limit_per_min\": \"<integer>\",\n    \"created_at\": \"<dateTime>\",\n    \"description\": \"<string>\",\n    \"monthly_quota\": \"<long>\",\n    \"usage_alert_threshold_pct\": \"<integer>\",\n    \"ip_allowlist\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"referer_allowlist\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"expires_at\": \"<dateTime>\",\n    \"revoked_at\": \"<dateTime>\",\n    \"revoked_reason\": \"<string>\",\n    \"last_used_at\": \"<dateTime>\"\n  }\n}",
+                  "body": "{\n  \"plaintext\": \"<string>\",\n  \"key\": {\n    \"id\": \"<string>\",\n    \"name\": \"<string>\",\n    \"key_prefix\": \"<string>\",\n    \"tier\": \"partner\",\n    \"rate_limit_per_min\": \"<integer>\",\n    \"created_at\": \"<dateTime>\",\n    \"description\": \"<string>\",\n    \"monthly_quota\": \"<long>\",\n    \"usage_alert_threshold_pct\": \"<integer>\",\n    \"ip_allowlist\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"referer_allowlist\": [\n      \"<string>\",\n      \"<string>\"\n    ],\n    \"expires_at\": \"<dateTime>\",\n    \"revoked_at\": \"<dateTime>\",\n    \"revoked_reason\": \"<string>\",\n    \"last_used_at\": \"<dateTime>\"\n  }\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -17720,7 +17720,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"webhooks\": [\n    {\n      \"id\": \"<uuid>\",\n      \"name\": \"<string>\",\n      \"url\": \"<string>\",\n      \"events\": [\n        \"anomaly.freeze\",\n        \"incident.sev1\"\n      ],\n      \"enabled\": \"<boolean>\",\n      \"created_at\": \"<dateTime>\",\n      \"updated_at\": \"<dateTime>\"\n    },\n    {\n      \"id\": \"<uuid>\",\n      \"name\": \"<string>\",\n      \"url\": \"<string>\",\n      \"events\": [\n        \"incident.sev1\",\n        \"incident.sev1\"\n      ],\n      \"enabled\": \"<boolean>\",\n      \"created_at\": \"<dateTime>\",\n      \"updated_at\": \"<dateTime>\"\n    }\n  ]\n}",
+                  "body": "{\n  \"webhooks\": [\n    {\n      \"id\": \"<uuid>\",\n      \"name\": \"<string>\",\n      \"url\": \"<string>\",\n      \"events\": [\n        \"anomaly.freeze\",\n        \"anomaly.freeze\"\n      ],\n      \"enabled\": \"<boolean>\",\n      \"created_at\": \"<dateTime>\",\n      \"updated_at\": \"<dateTime>\"\n    },\n    {\n      \"id\": \"<uuid>\",\n      \"name\": \"<string>\",\n      \"url\": \"<string>\",\n      \"events\": [\n        \"anomaly.freeze\",\n        \"incident.sev1\"\n      ],\n      \"enabled\": \"<boolean>\",\n      \"created_at\": \"<dateTime>\",\n      \"updated_at\": \"<dateTime>\"\n    }\n  ]\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -17797,7 +17797,7 @@
                 "method": "POST",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"divergence.firing\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                  "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                   "options": {
                     "raw": {
                       "headerFamily": "json",
@@ -17835,7 +17835,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"divergence.firing\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -17852,7 +17852,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"webhook\": {\n    \"id\": \"<uuid>\",\n    \"name\": \"<string>\",\n    \"url\": \"<string>\",\n    \"events\": [\n      \"incident.sev1\",\n      \"anomaly.freeze\"\n    ],\n    \"enabled\": \"<boolean>\",\n    \"created_at\": \"<dateTime>\",\n    \"updated_at\": \"<dateTime>\"\n  },\n  \"secret\": \"<string>\"\n}",
+                  "body": "{\n  \"webhook\": {\n    \"id\": \"<uuid>\",\n    \"name\": \"<string>\",\n    \"url\": \"<string>\",\n    \"events\": [\n      \"divergence.firing\",\n      \"incident.sev1\"\n    ],\n    \"enabled\": \"<boolean>\",\n    \"created_at\": \"<dateTime>\",\n    \"updated_at\": \"<dateTime>\"\n  },\n  \"secret\": \"<string>\"\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -17883,7 +17883,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"divergence.firing\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -17931,7 +17931,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"divergence.firing\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -17979,7 +17979,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"divergence.firing\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -18027,7 +18027,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"divergence.firing\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -18102,7 +18102,7 @@
                     "method": "PATCH",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.resolved\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                      "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -18152,7 +18152,7 @@
                         "method": "PATCH",
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.resolved\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                           "options": {
                             "raw": {
                               "headerFamily": "json",
@@ -18169,7 +18169,7 @@
                           "value": "application/json"
                         }
                       ],
-                      "body": "{\n  \"id\": \"<uuid>\",\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"anomaly.freeze\",\n    \"incident.sev1\"\n  ],\n  \"enabled\": \"<boolean>\",\n  \"created_at\": \"<dateTime>\",\n  \"updated_at\": \"<dateTime>\"\n}",
+                      "body": "{\n  \"id\": \"<uuid>\",\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.resolved\",\n    \"anomaly.freeze\"\n  ],\n  \"enabled\": \"<boolean>\",\n  \"created_at\": \"<dateTime>\",\n  \"updated_at\": \"<dateTime>\"\n}",
                       "cookie": [],
                       "_postman_previewlanguage": "json"
                     },
@@ -18212,7 +18212,7 @@
                         "method": "PATCH",
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.resolved\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                           "options": {
                             "raw": {
                               "headerFamily": "json",
@@ -18272,7 +18272,7 @@
                         "method": "PATCH",
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.resolved\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                           "options": {
                             "raw": {
                               "headerFamily": "json",
@@ -18332,7 +18332,7 @@
                         "method": "PATCH",
                         "body": {
                           "mode": "raw",
-                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.resolved\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
+                          "raw": "{\n  \"name\": \"<string>\",\n  \"url\": \"<string>\",\n  \"events\": [\n    \"incident.sev1\",\n    \"incident.resolved\"\n  ],\n  \"enabled\": \"<boolean>\"\n}",
                           "options": {
                             "raw": {
                               "headerFamily": "json",
@@ -18580,7 +18580,7 @@
                               "value": "application/json"
                             }
                           ],
-                          "body": "{\n  \"deliveries\": [\n    {\n      \"id\": \"<uuid>\",\n      \"event_type\": \"incident.resolved\",\n      \"attempt_count\": \"<integer>\",\n      \"created_at\": \"<dateTime>\",\n      \"next_attempt_at\": \"<dateTime>\",\n      \"delivered_at\": \"<dateTime>\",\n      \"last_error\": \"<string>\",\n      \"last_response_status\": \"<integer>\"\n    },\n    {\n      \"id\": \"<uuid>\",\n      \"event_type\": \"anomaly.freeze\",\n      \"attempt_count\": \"<integer>\",\n      \"created_at\": \"<dateTime>\",\n      \"next_attempt_at\": \"<dateTime>\",\n      \"delivered_at\": \"<dateTime>\",\n      \"last_error\": \"<string>\",\n      \"last_response_status\": \"<integer>\"\n    }\n  ]\n}",
+                          "body": "{\n  \"deliveries\": [\n    {\n      \"id\": \"<uuid>\",\n      \"event_type\": \"anomaly.freeze\",\n      \"attempt_count\": \"<integer>\",\n      \"created_at\": \"<dateTime>\",\n      \"next_attempt_at\": \"<dateTime>\",\n      \"delivered_at\": \"<dateTime>\",\n      \"last_error\": \"<string>\",\n      \"last_response_status\": \"<integer>\"\n    },\n    {\n      \"id\": \"<uuid>\",\n      \"event_type\": \"incident.resolved\",\n      \"attempt_count\": \"<integer>\",\n      \"created_at\": \"<dateTime>\",\n      \"next_attempt_at\": \"<dateTime>\",\n      \"delivered_at\": \"<dateTime>\",\n      \"last_error\": \"<string>\",\n      \"last_response_status\": \"<integer>\"\n    }\n  ]\n}",
                           "cookie": [],
                           "_postman_previewlanguage": "json"
                         },
@@ -19208,7 +19208,7 @@
                 "method": "POST",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"393640\"\n}",
+                  "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"923936\"\n}",
                   "options": {
                     "raw": {
                       "headerFamily": "json",
@@ -19246,7 +19246,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"393640\"\n}",
+                      "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"923936\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -19303,7 +19303,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"393640\"\n}",
+                      "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"923936\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -19351,7 +19351,7 @@
                     "method": "POST",
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"393640\"\n}",
+                      "raw": "{\n  \"email\": \"<email>\",\n  \"code\": \"923936\"\n}",
                       "options": {
                         "raw": {
                           "headerFamily": "json",
@@ -20634,7 +20634,7 @@
                       "value": "application/json"
                     }
                   ],
-                  "body": "{\n  \"data\": {\n    \"hash\": \"<string>\",\n    \"ledger\": \"<integer>\",\n    \"close_time\": \"<dateTime>\",\n    \"index\": \"<integer>\",\n    \"source_account\": \"<string>\",\n    \"fee_charged\": \"<integer>\",\n    \"max_fee\": \"<integer>\",\n    \"operation_count\": \"<integer>\",\n    \"successful\": \"<boolean>\",\n    \"result_code\": \"<integer>\",\n    \"memo_type\": \"<string>\",\n    \"memo\": \"<string>\",\n    \"operations\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\",\n          \"key_1\": 7150.974366813898,\n          \"key_2\": 4957\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\",\n          \"key_1\": \"string\"\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      }\n    ],\n    \"events\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"event_type\": \"<string>\",\n        \"topic_0\": \"<string>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"event_type\": \"<string>\",\n        \"topic_0\": \"<string>\"\n      }\n    ]\n  }\n}",
+                  "body": "{\n  \"data\": {\n    \"hash\": \"<string>\",\n    \"ledger\": \"<integer>\",\n    \"close_time\": \"<dateTime>\",\n    \"index\": \"<integer>\",\n    \"source_account\": \"<string>\",\n    \"fee_charged\": \"<integer>\",\n    \"max_fee\": \"<integer>\",\n    \"operation_count\": \"<integer>\",\n    \"successful\": \"<boolean>\",\n    \"result_code\": \"<integer>\",\n    \"memo_type\": \"<string>\",\n    \"memo\": \"<string>\",\n    \"operations\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\",\n          \"key_1\": \"string\"\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": 9635.053044185042,\n          \"key_1\": 839.5470189861953\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      }\n    ],\n    \"events\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"event_type\": \"<string>\",\n        \"topic_0\": \"<string>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"op_index\": \"<integer>\",\n        \"event_index\": \"<integer>\",\n        \"event_type\": \"<string>\",\n        \"topic_0\": \"<string>\"\n      }\n    ]\n  }\n}",
                   "cookie": [],
                   "_postman_previewlanguage": "json"
                 },
@@ -20893,7 +20893,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"data\": {\n    \"ledger\": \"<integer>\",\n    \"operations\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": 1140\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\"\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      }\n    ],\n    \"next_cursor\": \"<string>\",\n    \"op_type_stats\": [\n      {\n        \"type\": \"<string>\",\n        \"count\": \"<long>\"\n      },\n      {\n        \"type\": \"<string>\",\n        \"count\": \"<long>\"\n      }\n    ]\n  }\n}",
+              "body": "{\n  \"data\": {\n    \"ledger\": \"<integer>\",\n    \"operations\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": 6205\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": 4449.283028952777,\n          \"key_1\": 3511.098448652774\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      }\n    ],\n    \"next_cursor\": \"<string>\",\n    \"op_type_stats\": [\n      {\n        \"type\": \"<string>\",\n        \"count\": \"<long>\"\n      },\n      {\n        \"type\": \"<string>\",\n        \"count\": \"<long>\"\n      }\n    ]\n  }\n}",
               "cookie": [],
               "_postman_previewlanguage": "json"
             },
@@ -21753,7 +21753,7 @@
                           "value": "application/json"
                         }
                       ],
-                      "body": "{\n  \"data\": {\n    \"account\": \"<string>\",\n    \"operations\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\"\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\",\n          \"key_1\": false,\n          \"key_2\": 6855.926099233329\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      }\n    ],\n    \"next_cursor\": \"<string>\",\n    \"scope\": \"all\"\n  }\n}",
+                      "body": "{\n  \"data\": {\n    \"account\": \"<string>\",\n    \"operations\": [\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\",\n          \"key_1\": \"string\"\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      },\n      {\n        \"ledger\": \"<integer>\",\n        \"close_time\": \"<dateTime>\",\n        \"tx_hash\": \"<string>\",\n        \"tx_index\": \"<integer>\",\n        \"op_index\": \"<integer>\",\n        \"type\": \"<string>\",\n        \"source_account\": \"<string>\",\n        \"fields\": {\n          \"key_0\": \"string\",\n          \"key_1\": false,\n          \"key_2\": 6855.926099233329\n        },\n        \"raw_xdr\": \"<string>\",\n        \"result_code\": \"<integer>\"\n      }\n    ],\n    \"next_cursor\": \"<string>\",\n    \"scope\": \"all\"\n  }\n}",
                       "cookie": [],
                       "_postman_previewlanguage": "json"
                     },

@@ -35,6 +35,7 @@ interface IssuerDetail {
   g_strkey: string;
   home_domain?: string;
   org_name?: string;
+  org_verified?: boolean;
   scam_reason?: string;
   auth_required?: boolean;
   auth_revocable?: boolean;
@@ -233,9 +234,30 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
         />
         {detail.org_name ? (
           <>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {detail.org_name}
-            </h1>
+            {/* CS-100: org_name is SELF-DECLARED SEP-1 metadata. Render the
+                verification state next to it so an unverified name can't pass
+                as an authoritative identity. Verified = the org's stellar.toml
+                lists this issuer back (bidirectional). */}
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {detail.org_name}
+              </h1>
+              {detail.org_verified ? (
+                <span
+                  title="SEP-1 verified — the organisation's stellar.toml lists this issuer back (bidirectional)"
+                  className="rounded bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-up-strong"
+                >
+                  ✓ Verified
+                </span>
+              ) : (
+                <span
+                  title="Unverified — this organisation name is self-declared in the issuer's SEP-1 toml and is NOT cross-confirmed by the organisation. Do not treat it as a verified identity."
+                  className="rounded bg-surface-sunk px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted"
+                >
+                  Unverified
+                </span>
+              )}
+            </div>
             <p className="font-mono text-xs text-ink-muted break-all">
               {g_strkey}
             </p>

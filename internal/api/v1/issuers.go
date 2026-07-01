@@ -54,6 +54,12 @@ type Issuer struct {
 	// listing endpoint surfaces; populated by the
 	// `stellarindex-ops sep1-refresh` job.
 	OrgName string `json:"org_name,omitempty"`
+	// OrgVerified is true only when the issuer's SEP-1 toml lists it back
+	// (bidirectional proof — one-way is spoofable). When false, OrgName is
+	// issuer-self-declared; clients MUST NOT render it as authoritative
+	// (CS-100 impersonation). Always present so the absence of the field
+	// can't be mistaken for "verified".
+	OrgVerified bool `json:"org_verified"`
 	// ScamReason is non-empty when the issuer is flagged as scam /
 	// malicious by the curated `known_scams.go` map (sourced from
 	// stellar.expert's directory).
@@ -240,6 +246,7 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		GStrkey:        row.GStrkey,
 		HomeDomain:     homeDomain,
 		OrgName:        orgName,
+		OrgVerified:    row.OrgVerified,
 		ScamReason:     scamReason(row.GStrkey),
 		AuthRequired:   row.AuthRequired,
 		AuthRevocable:  row.AuthRevocable,

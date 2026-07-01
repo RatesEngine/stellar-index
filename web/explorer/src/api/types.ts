@@ -2729,9 +2729,19 @@ export interface paths {
                                 /**
                                  * @description Issuer's organisation name from SEP-1
                                  *     `[DOCUMENTATION].ORG_NAME`. Same value the
-                                 *     listing endpoint surfaces.
+                                 *     listing endpoint surfaces. SELF-DECLARED unless
+                                 *     `org_verified` is true — do NOT render as
+                                 *     authoritative without checking `org_verified`.
                                  */
                                 org_name?: string;
+                                /**
+                                 * @description True only when the issuer's SEP-1 toml lists this
+                                 *     issuer back (bidirectional proof; one-way is
+                                 *     spoofable). When false, `org_name` is unverified
+                                 *     self-declared metadata — clients must present it
+                                 *     as such, not as a verified identity (CS-100).
+                                 */
+                                org_verified?: boolean;
                                 auth_required?: boolean | null;
                                 auth_revocable?: boolean | null;
                                 auth_immutable?: boolean | null;
