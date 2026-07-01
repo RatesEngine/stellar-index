@@ -104,13 +104,16 @@ verified-correct implementation in
 
 **Downstream design impact**
 
-- `pkg/types` public amount type is a distinct Go type, not a
-  reused `*big.Int`. It cannot be conflated with plain-integer
+- The `canonical.Amount` type (public via `pkg/client`, not a
+  separate `pkg/types`) is a distinct Go type wrapping `*big.Int`,
+  not a reused `*big.Int`. It cannot be conflated with plain-integer
   fields by accident.
 - SDK-generated code respects the string-on-wire rule.
-- Storage schema audits (`make db-migrate-status`) refuse any
-  migration that adds a `BIGINT` or `DOUBLE PRECISION` column
-  holding an amount.
+- Storage schema convention is NUMERIC for amounts (never BIGINT /
+  DOUBLE PRECISION). **NOTE (2026-07): this is a review-and-migration-
+  convention, NOT a machine check** — `make db-migrate-status` only
+  prints migration state; the BIGINT/DOUBLE-refusing lint below was
+  never built.
 
 ## Alternatives considered
 
@@ -125,10 +128,17 @@ verified-correct implementation in
 
 ## Enforcement
 
-- Lint rule in `.golangci.yml` (via a small custom analyzer) flags
+- **REALITY (2026-07 audit CS-007): the custom golangci analyzer below
+  and the migration BIGINT/DOUBLE refusal above DO NOT EXIST.** They were
+  specified here but never built. A tree-wide scan finds zero truncation
+  sites today, so the *discipline* holds at runtime (`ErrI128Overflow` +
+  `canonical.Amount` being the only path), but there is no CI guard — a
+  future `int64(parts.Lo)` would ship green. Building the analyzer + a
+  migration-column lint is tracked as launch-todo P4-6.
+- ~~Lint rule in `.golangci.yml` (via a small custom analyzer) flags
   any function returning or accepting `int64` whose parameter
   name contains `amount`, `balance`, `reserve`, `supply`, `price`,
-  `wei`, `stroop`, or `value`.
+  `wei`, `stroop`, or `value`.~~ (aspirational — not built)
 - Code review: CODEOWNERS requirement on `internal/canonical/`
   means @ash sees any change to the core amount type.
 - Fixture tests: `TestAmountRoundTrip_KALIEN_Incident` et al. in

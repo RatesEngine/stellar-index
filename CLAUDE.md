@@ -95,7 +95,7 @@ development. If one does, it's a bug.
 │   ├── stellarrpc/               JSON-RPC client for diagnostics + fixture capture, not prod ingest
 │   ├── sources/                  one package per source (on-chain + CEX + FX)
 │   ├── aggregate/                VWAP/TWAP/outlier/triangulation
-│   ├── storage/                  TimescaleDB (served tier) + ClickHouse (raw lake, ADR-0034) + Redis + MinIO adapters
+│   ├── storage/                  TimescaleDB (served tier) + ClickHouse (raw lake, ADR-0034) + Redis. Subpackages only (timescale/ clickhouse/ redisclient/) — NO top-level adapter files. MinIO/lake access is via internal/ledgerstream + go-stellar-sdk datastore, not a storage adapter.
 │   ├── archivecompleteness/      dual-archive completeness daemon (ADR-0017)
 │   ├── hashdb/                   on-disk (ledger_seq → sha256(LCM)) record for drift-detection-vs-upstream-rewrites. LIBRARY ONLY — currently has zero production callers; not yet wired into any binary (the ADR-0033 "feeder" role is aspirational).
 │   ├── api/                      REST/SSE handlers (v1)
@@ -271,12 +271,15 @@ linked design doc has the full detail.
 - **Comet uses a shared `("POOL", <event>)` topic across every pool
   contract**, not a per-protocol namespace. Any pubnet contract that
   deploys Balancer-v1 Comet code will look identical on the wire.
-  **As of ADR-0035, decoders gate `Matches()` on contract identity, not
-  topic bytes** — but Comet has no factory namespace to anchor on, so it
-  is the one open case: it adopts an operator-configured pool allowlist
-  or a WASM-hash gate rather than the factory-fan-out model the other
-  Soroban decoders use. Until that lands, narrow coverage is still a
-  downstream filter on `Trade.Source = "comet"` + contract address. →
+  **ADR-0035 factory-anchored contract gating is only PARTIALLY rolled out.**
+  Only `soroswap` (pair/factory registry) and `blend` (childgate) currently
+  gate `Matches()` on contract identity. **`phoenix`, `aquarius`, `defindex`,
+  and `comet` still match on topic bytes alone** (ungated) — so a look-alike
+  contract emitting the same topic shape can inject fabricated trades under
+  those sources (see docs/audit-2026-06-30/ CS-026). Comet is the *hardest*
+  case (no factory namespace — needs a pool allowlist / WASM-hash gate), not
+  the only one. Until each gate lands, narrow coverage for those sources is a
+  downstream filter on `Trade.Source = "<name>"` + contract address. →
   [docs/adr/0035-factory-anchored-contract-gating.md](docs/adr/0035-factory-anchored-contract-gating.md)
 - **Reflector v3 has no on-chain `twap` or `x_*` methods.** Some
   upstream docs imply it does; it doesn't. We compute TWAP and
@@ -449,10 +452,16 @@ Copy the `binance` / `kraken` package as the template.
 
 ### "Add a new on-chain Soroban DEX"
 
-Use the five-file convention (`README.md`, `events.go`, `decode.go`,
-`consumer.go`, `source_test.go`). Template PR: look at how Soroswap was
-added (`internal/sources/soroswap/`). Differences per DEX usually
-boil down to event topic shape + amount-decoding quirks.
+**Full step-by-step checklist: [docs/contributing/add-onchain-source.md](docs/contributing/add-onchain-source.md).**
+The package is SIX files (`README.md`, `events.go`, `decode.go`, `consumer.go`,
+**`dispatcher_adapter.go`** — the production seam that implements `dispatcher.Decoder`;
+this is the object the dispatcher actually calls — and `source_test.go`), PLUS **six
+wiring edits in other packages** (config `KnownSources`, `pipeline/dispatcher.go`
+BuildDispatcher, `pipeline/sink.go` HandleEvent + IsProjectedEvent,
+`projector/registry.go` buildSource, `external/registry.go` Metadata). Miss a wiring
+edit and the source compiles, registers nowhere, and silently emits nothing. Template:
+`internal/sources/soroswap/`. Reuse the shared helpers (`internal/scval`,
+`canonical.Amount`) — check CAPABILITY-INVENTORY.md before writing utilities.
 
 ### "Add a new supply observer"
 
@@ -509,7 +518,9 @@ If it doesn't, that's a CI failure.
 
 1. Declare the metric in `internal/obs/metrics.go` (one of the
    typed `*Vec` variables near the bottom) and register it in
-   the `init()` block.
+   **`registerAppMetrics()` / `registerAppMetricsTail()`** (NOT
+   `init()` directly — `init()` delegates to those, which are split
+   to stay under the `funlen` ceiling).
 2. Wire it at the point of observation. For goroutine workers
    doing IO, the established pattern is paired:
    - `*Total{outcome}` counter for outcomes (per-attempt count).
