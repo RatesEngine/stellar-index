@@ -2235,7 +2235,32 @@ func convertHistoryPoints(rows []timescale.HistoryPoint) []v1.HistoryPoint {
 // swap this for an adapter that reads `price:<asset>` from Redis
 // first and this trade-based path becomes the second-level
 // fallback.
-type storePriceReader struct{ s *timescale.Store }
+// defaultVWAPFreshness: a closed 1m VWAP bucket whose close is older than
+// this is served with stale=true (CS-017). Well above the structural
+// 1-2min closed-bucket floor so active pairs stay stale=false, but decisive
+// on genuinely dormant pairs (the bug: a 200-day-old VWAP was served
+// stale=false for the ~250k dormant/delisted long-tail).
+const defaultVWAPFreshness = 15 * time.Minute
+
+type storePriceReader struct {
+	s             *timescale.Store
+	vwapFreshness time.Duration    // 0 → defaultVWAPFreshness
+	now           func() time.Time // nil → time.Now
+}
+
+func (r storePriceReader) freshnessWindow() time.Duration {
+	if r.vwapFreshness > 0 {
+		return r.vwapFreshness
+	}
+	return defaultVWAPFreshness
+}
+
+func (r storePriceReader) clock() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
+}
 
 func (r storePriceReader) LatestPrice(ctx context.Context, asset, quote canonical.Asset) (v1.PriceSnapshot, []string, bool, error) {
 	pair, err := canonical.NewPair(asset, quote)
@@ -2251,8 +2276,12 @@ func (r storePriceReader) LatestPrice(ctx context.Context, asset, quote canonica
 	//   - it labels stale=false in the envelope.
 	row, err := r.s.LatestClosedVWAP1mForPair(ctx, pair)
 	if err == nil {
+		// CS-017: the bucket closes at Bucket+1min; flag stale when that
+		// close is older than the freshness window, so a dormant pair's
+		// months-old VWAP is no longer served as stale=false.
+		stale := r.clock().Sub(row.Bucket.Add(time.Minute)) > r.freshnessWindow()
 		return v1.VWAP1mToSnapshot(asset.String(), quote.String(), row.VWAP, row.Bucket),
-			row.Sources, false, nil
+			row.Sources, stale, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return v1.PriceSnapshot{}, nil, false, err
