@@ -15,6 +15,14 @@ against.
 
 ## [Unreleased]
 
+## [v0.6.0] — 2026-07-01
+
+Minor bump for the **breaking** LC-001 assets split (`/v1/assets` is now
+Stellar-only; see Changed). This section also captures the changes accumulated
+since `v0.5.0-rc.128` — the CHANGELOG promotion had lagged behind the release
+tags (which reached `rc.151`), so the entries below span `rc.129`–`rc.151` plus
+the 2026-07-01 session.
+
 ### Added
 - **`GET /v1/external/assets` + `GET /v1/external/assets/{slug}`.** The non-Stellar
   side of the assets split (LC-001) — fiat currencies + reference-only coins. See
