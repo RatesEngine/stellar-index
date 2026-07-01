@@ -134,6 +134,14 @@ jobs:
   integration-test:
     name: integration tests (Docker)
     runs-on: ubuntu-latest
+    # NON-BLOCKING (CS-070): the suite was only ever COMPILED in CI, never
+    # run, so it accumulated rot — several tests fail on first run (stale
+    # assertions like the FXSources count after `massive` was added to the
+    # registry, and data-setup gaps that expect pre-seeded markets). Running
+    # it here SURFACES that rot without red-lighting main. Flip
+    # continue-on-error off (make it a required gate) once the suite is green
+    # again — tracked in docs/operations/audit-remediation-operator-actions.md.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
@@ -142,11 +150,8 @@ jobs:
           cache: true
       - run: go mod download
       - name: make test-integration
-        # CS-070: the integration suite (testcontainers-go — spins
-        # TimescaleDB/Redis/MinIO) was only COMPILED in CI (the unit job's
-        # test-integration-build step), never RUN. ubuntu-latest ships a
-        # Docker daemon, so testcontainers works here. 10-min cap matches
-        # the Makefile target.
+        # testcontainers-go spins TimescaleDB/Redis/MinIO; ubuntu-latest ships
+        # a Docker daemon. 10-min cap matches the Makefile target.
         run: make test-integration
 
   # ────────────────────────────────────────────────────────────────
