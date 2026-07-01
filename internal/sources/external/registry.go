@@ -107,9 +107,11 @@ var Registry = map[string]Metadata{
 	// `fx_quotes`, or collapse massive↔polygon-forex) is tracked as FX-debt in
 	// docs/operations/launch-todo.md; massive's own consumers read fx_quotes
 	// directly and are unaffected.
-	"massive":          {Class: ClassExchange, Subclass: SubclassFX, DefaultWeight: 100, IncludeInVWAP: true, Paid: true, BackfillAvailable: true, BackfillSafe: true},
-	"polygon-forex":    {Class: ClassExchange, Subclass: SubclassFX, DefaultWeight: 100, IncludeInVWAP: true, Paid: true, BackfillAvailable: true, BackfillSafe: true},
-	"exchangeratesapi": {Class: ClassExchange, Subclass: SubclassFX, DefaultWeight: 100, IncludeInVWAP: true, Paid: true, BackfillAvailable: true, BackfillSafe: true},
+	// FX pollers stamp amounts at 1e6 (DefaultDecimals=6), NOT the CEX 1e8 —
+	// AmountDecimals:6 so the USD-volume gate scales them right (CS-040).
+	"massive":          {Class: ClassExchange, Subclass: SubclassFX, DefaultWeight: 100, IncludeInVWAP: true, Paid: true, BackfillAvailable: true, BackfillSafe: true, AmountDecimals: 6},
+	"polygon-forex":    {Class: ClassExchange, Subclass: SubclassFX, DefaultWeight: 100, IncludeInVWAP: true, Paid: true, BackfillAvailable: true, BackfillSafe: true, AmountDecimals: 6},
+	"exchangeratesapi": {Class: ClassExchange, Subclass: SubclassFX, DefaultWeight: 100, IncludeInVWAP: true, Paid: true, BackfillAvailable: true, BackfillSafe: true, AmountDecimals: 6},
 
 	// ─── Aggregators (divergence signal; excluded from VWAP) ─────
 	"coingecko":     {Class: ClassAggregator, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true},
@@ -117,7 +119,7 @@ var Registry = map[string]Metadata{
 	"cryptocompare": {Class: ClassAggregator, DefaultWeight: 100, IncludeInVWAP: false, Paid: true, BackfillAvailable: true, BackfillSafe: true},
 
 	// ─── Sovereign daily anchors (sanity check only) ─────────────
-	"ecb": {Class: ClassAuthoritySanity, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true},
+	"ecb": {Class: ClassAuthoritySanity, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true, AmountDecimals: 6},
 
 	// ─── Off-chain oracles (Chainlink via EVM RPC) ───────────────
 	// Chainlink is on Ethereum mainnet, not Stellar; we read it via

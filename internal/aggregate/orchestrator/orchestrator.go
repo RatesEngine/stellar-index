@@ -1228,14 +1228,16 @@ func minUSDVolumeApplies(pair canonical.Pair) bool {
 }
 
 // windowUSDVolume sums quote_amount across the supplied trades and
-// converts to USD assuming the uniform 10^8 scale that off-chain
-// (CEX/FX) sources stamp on
-// `internal/sources/external/<venue>::externalAmountDecimals`.
+// converts to USD, scaling EACH trade by ITS OWN source's amount
+// decimals (external.Lookup(src).AmountScaleDecimals()) rather than a
+// uniform 10^8 (CS-040). The old fixed-1e8 assumption understated FX
+// sources (which stamp 1e6) by ~100×, so a fiat:USD pair fed by the FX
+// pollers (EUR/USD, …) would compute USD volume 100× low and the
+// dropForMinUSDVolume gate would wrongly drop it. This is the latent
+// trap behind keeping min_usd_volume=0.
 //
-// CALLER CONTRACT: only invoke when [minUSDVolumeApplies] returned
-// true — that gate guarantees every trade in the slice is off-chain
-// and thus at 1e8 scale. Calling on a mixed-decimal slice yields a
-// numerically-wrong result.
+// CALLER CONTRACT: invoke when [minUSDVolumeApplies] is true (the quote
+// is USD, so quote_amount is USD-denominated at the source's scale).
 //
 // Empty input yields 0 (a window with zero contributing trades has
 // zero USD volume by definition).
@@ -1243,22 +1245,19 @@ func windowUSDVolume(trades []canonical.Trade) float64 {
 	if len(trades) == 0 {
 		return 0
 	}
-	sum := new(big.Int)
+	// The comparison is operator-tunable, not precision-critical, so a
+	// big.Rat accumulator → float64 is acceptable.
+	total := new(big.Rat)
 	for i := range trades {
 		amt := trades[i].QuoteAmount.BigInt()
-		if amt == nil {
+		if amt == nil || amt.Sign() == 0 {
 			continue
 		}
-		sum.Add(sum, amt)
+		dec := external.Lookup(trades[i].Source).AmountScaleDecimals()
+		scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(dec)), nil)
+		total.Add(total, new(big.Rat).SetFrac(amt, scale))
 	}
-	if sum.Sign() == 0 {
-		return 0
-	}
-	// 1e8 → USD. SetFrac + Float64 produces an IEEE 754 double; the
-	// MinUSDVolume comparison is operator-tunable and not a
-	// precision-sensitive math step, so float64 is acceptable here.
-	rat := new(big.Rat).SetFrac(sum, big.NewInt(100_000_000))
-	f, _ := rat.Float64()
+	f, _ := total.Float64()
 	return f
 }
 

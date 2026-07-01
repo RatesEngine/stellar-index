@@ -185,6 +185,23 @@ type Metadata struct {
 	// audited. Default-false for on-chain Soroban sources; flip to
 	// true per-source as `wasm-history` audits land.
 	BackfillSafe bool
+
+	// AmountDecimals is the smallest-unit scale of the amounts this
+	// source stamps on canonical.Trade (Quote/BaseAmount): 8 for the
+	// CEX/aggregator 1e8 convention, 6 for the FX pollers' 1e6
+	// (DefaultDecimals). 0 means "unset → treat as 8" via
+	// AmountScaleDecimals(). Read this instead of assuming 1e8 (CS-040):
+	// the USD-volume gate mis-scales FX ~100× otherwise.
+	AmountDecimals int
+}
+
+// AmountScaleDecimals returns the source's amount scale, defaulting to 8
+// (the CEX 1e8 convention) when AmountDecimals is unset.
+func (m Metadata) AmountScaleDecimals() int {
+	if m.AmountDecimals > 0 {
+		return m.AmountDecimals
+	}
+	return 8
 }
 
 // Connector is the common root interface. Every venue package

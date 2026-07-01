@@ -1500,3 +1500,23 @@ func TestTick_StreamPublisher_ErrorDoesNotPropagate(t *testing.T) {
 		t.Error("VWAP key should be present even when stream publish fails")
 	}
 }
+
+// TestWindowUSDVolume_ScalesPerSourceDecimals pins CS-040: USD volume must
+// scale each trade by its source's amount decimals, not a uniform 1e8. The FX
+// pollers stamp 1e6 — the old fixed-1e8 divisor understated them ~100×.
+func TestWindowUSDVolume_ScalesPerSourceDecimals(t *testing.T) {
+	mk := func(src string, quote int64) canonical.Trade {
+		return canonical.Trade{Source: src, QuoteAmount: canonical.NewAmount(big.NewInt(quote))}
+	}
+	if got := windowUSDVolume([]canonical.Trade{mk("binance", 100_000_000)}); got != 1 {
+		t.Errorf("CEX (1e8): got %v USD, want 1", got)
+	}
+	if got := windowUSDVolume([]canonical.Trade{mk("exchangeratesapi", 1_000_000)}); got != 1 {
+		t.Errorf("FX (1e6): got %v USD, want 1 (old 1e8 code gave 0.01)", got)
+	}
+	if got := windowUSDVolume([]canonical.Trade{
+		mk("binance", 100_000_000), mk("exchangeratesapi", 1_000_000),
+	}); got != 2 {
+		t.Errorf("mixed CEX+FX: got %v USD, want 2", got)
+	}
+}
