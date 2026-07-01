@@ -40,8 +40,10 @@ echo "Checking config reference sync..."
 if [ -f internal/config/config.go ] && [ -f docs/reference/config/README.md ]; then
   # Extract every `toml:"name"` tag value from config.go. Keeps only
   # the name (no commas, no omitempty).
-  grep -oE 'toml:"[a-z_]+"' internal/config/config.go | \
-    sed -E 's/toml:"([a-z_]+)"/\1/' | sort -u | while read -r tomlname; do
+  # CS-131: [a-z0-9_]+ (was [a-z_]+, which silently skipped digit-bearing
+  # tags like s3_*, sep10, sep41, phase2 — a rename of one would stay green).
+  grep -oE 'toml:"[a-z0-9_]+"' internal/config/config.go | \
+    sed -E 's/toml:"([a-z0-9_]+)"/\1/' | sort -u | while read -r tomlname; do
       if ! grep -qF "$tomlname" docs/reference/config/README.md; then
         err "Config TOML key '$tomlname' in config.go missing from docs/reference/config/README.md — run 'make docs-config' to regen"
       fi
@@ -58,11 +60,18 @@ fi
 echo "Checking API routes vs OpenAPI..."
 if [ -d internal/api/v1 ] && [ -f openapi/stellar-index.v1.yaml ]; then
   # Forward: handlers that aren't in the spec (client misses them).
-  grep -rhoE 'HandleFunc\("[A-Z]+ /v1[^"]*"' internal/api/v1/ 2>/dev/null | \
+  # CS-052: match BOTH HandleFunc("VERB /v1…") and mux.Handle("VERB /v1…")
+  # — the latter is used for middleware-wrapped routes and previously slipped
+  # past this check (that's how the undocumented staff route escaped).
+  # internal_routes_re allow-lists routes deliberately kept out of the public
+  # spec (staff/PII endpoints); add a route here with a reason to exempt it.
+  internal_routes_re='^/account/admin/'  # staff-only lookup, intentionally not public
+  grep -rhoE 'Handle(Func)?\("[A-Z]+ /v1[^"]*"' internal/api/v1/ 2>/dev/null | \
     sed -E 's|.*"[A-Z]+ /v1||; s|"$||' | \
     sed -E 's|^$|/|' | \
     sort -u | while IFS= read -r route; do
       [ -z "$route" ] && continue
+      if [[ "$route" =~ $internal_routes_re ]]; then continue; fi
       # OpenAPI path entries look like `  /ohlc:` at 2-space indent.
       if ! grep -qE "^  ${route}:" openapi/stellar-index.v1.yaml; then
         err "Route '$route' is registered in handlers but missing from OpenAPI spec"
@@ -88,7 +97,9 @@ if [ -d internal/api/v1 ] && [ -f openapi/stellar-index.v1.yaml ]; then
       # list when we add write verbs.
       found=0
       for method in GET POST PUT PATCH DELETE; do
-        if grep -qrF "HandleFunc(\"${method} /v1${route}\"" internal/api/v1/ 2>/dev/null; then
+        # CS-052: check both HandleFunc( and mux.Handle( registrations.
+        if grep -qrF "HandleFunc(\"${method} /v1${route}\"" internal/api/v1/ 2>/dev/null \
+          || grep -qrF "Handle(\"${method} /v1${route}\"" internal/api/v1/ 2>/dev/null; then
           found=1
           break
         fi

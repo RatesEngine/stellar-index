@@ -100,6 +100,10 @@ if ! amtool check-config "$RENDERED"; then
   exit 1
 fi
 
-install -m 0644 -o root -g root "$RENDERED" "$TARGET"
+# CS-121: 0640 (not 0644) so the rendered config — which embeds the Discord
+# webhook URLs + the Healthchecks deadman URL (bearer capabilities) — is not
+# world-readable. Group is the alertmanager service user's group (prometheus on
+# r1) so the service can still read it; override via AM_GROUP if it differs.
+install -m 0640 -o root -g "${AM_GROUP:-prometheus}" "$RENDERED" "$TARGET"
 systemctl reload prometheus-alertmanager
 echo "alertmanager: applied $TARGET, reload OK"

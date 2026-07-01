@@ -19,7 +19,10 @@ HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
 # ─── Authentication ─────────────────────────────────────────────────
 PermitRootLogin {{ ssh_permit_root_login }}
 PubkeyAuthentication yes
-PasswordAuthentication {{ 'no' if not ssh_permit_password_auth else 'yes' }}
+{# CS-120: coerce with | bool so a string override (-e ssh_permit_password_auth=false
+   or a quoted "false" in inventory — both Jinja-truthy) can't silently INVERT the
+   gate to `PasswordAuthentication yes`. #}
+PasswordAuthentication {{ 'yes' if (ssh_permit_password_auth | bool) else 'no' }}
 ChallengeResponseAuthentication no
 KbdInteractiveAuthentication no
 UsePAM yes
