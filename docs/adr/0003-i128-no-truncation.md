@@ -110,10 +110,8 @@ verified-correct implementation in
   fields by accident.
 - SDK-generated code respects the string-on-wire rule.
 - Storage schema convention is NUMERIC for amounts (never BIGINT /
-  DOUBLE PRECISION). **NOTE (2026-07): this is a review-and-migration-
-  convention, NOT a machine check** — `make db-migrate-status` only
-  prints migration state; the BIGINT/DOUBLE-refusing lint below was
-  never built.
+  DOUBLE PRECISION), enforced by `scripts/ci/lint-i128.sh` (a monetary-
+  named column typed BIGINT/DOUBLE/float fails CI). See Enforcement below.
 
 ## Alternatives considered
 
@@ -128,17 +126,19 @@ verified-correct implementation in
 
 ## Enforcement
 
-- **REALITY (2026-07 audit CS-007): the custom golangci analyzer below
-  and the migration BIGINT/DOUBLE refusal above DO NOT EXIST.** They were
-  specified here but never built. A tree-wide scan finds zero truncation
-  sites today, so the *discipline* holds at runtime (`ErrI128Overflow` +
-  `canonical.Amount` being the only path), but there is no CI guard — a
-  future `int64(parts.Lo)` would ship green. Building the analyzer + a
-  migration-column lint is tracked as launch-todo P4-6.
+- **CI grep-lint — `scripts/ci/lint-i128.sh` (built 2026-07-01, wired into
+  `make verify`).** Two zero-tolerance checks that keep the tree clean:
+  (1) rejects `int64(<x>.Lo)` / `int(<x>.Lo)` in production Go — truncating a
+  128-bit Soroban value to its low word (the classic bug; the correct decode
+  passes lo as `uint64` to `canonical.FromInt128Parts`); (2) rejects
+  BIGINT/DOUBLE/REAL/FLOAT on a monetary-named migration column
+  (amount/balance/reserve/supply/stroop/wei/circulating/market_cap). This is
+  the pragmatic form of the guard originally specified below — a shell grep,
+  not a golangci analyzer (an analyzer plugin is heavier for the same signal).
 - ~~Lint rule in `.golangci.yml` (via a small custom analyzer) flags
   any function returning or accepting `int64` whose parameter
   name contains `amount`, `balance`, `reserve`, `supply`, `price`,
-  `wei`, `stroop`, or `value`.~~ (aspirational — not built)
+  `wei`, `stroop`, or `value`.~~ (superseded by the grep-lint above)
 - Code review: CODEOWNERS requirement on `internal/canonical/`
   means @ash sees any change to the core amount type.
 - Fixture tests: `TestAmountRoundTrip_KALIEN_Incident` et al. in

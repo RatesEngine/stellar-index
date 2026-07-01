@@ -165,6 +165,10 @@ jobs:
         # violations or on stale baseline entries, forcing the
         # baseline to shrink monotonically.
         run: ./scripts/ci/lint-imports.sh
+      - name: lint-i128
+        # ADR-0003: reject int64(x.Lo) i128 truncation in Go + BIGINT/float
+        # on monetary migration columns (amounts are NUMERIC).
+        run: ./scripts/ci/lint-i128.sh
 
   actions-pinning:
     name: github-actions SHA-pinning lint
