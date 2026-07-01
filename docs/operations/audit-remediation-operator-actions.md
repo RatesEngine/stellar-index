@@ -50,6 +50,28 @@ these wait for you.
 - [ ] Narrow `allowed_ssh_cidrs` from `0.0.0.0/0` once a stable admin range exists.
 - [ ] Optional: Cloudflare orange-cloud in front of `api.` (WAF/L7).
 
+## Decoder contract-gating (CS-026) — blocked on per-source data/design
+The mechanism exists (`childgate.Registry` seeded from the `protocol_contracts`
+table + hard-coded factories, gated `Matches()` — as `blend`/`soroswap` already
+do). Extending it to the 4 ungated sources is blocked on data only the team /
+operator can supply — a gate on an UNCONFIRMED factory either drops real trades
+(fail-closed, unseeded) or bakes in a wrong trust root, so it must not be guessed:
+- [ ] **phoenix** — confirm the pool-factory contract ID with the Phoenix team
+      (docs/protocols/phoenix.md marks it "confirm the factory"); then hard-code
+      it as `phoenix.MainnetPoolFactories` + `seed-protocol-contracts` + lake
+      re-derive. Then I wire the childgate gate (mechanical, ~blend-shaped).
+- [ ] **defindex** — confirm the full `DeFindexFactory` set (the doc notes >1
+      factory + an open question on vault enumeration); then same as phoenix.
+- [ ] **aquarius** — pin the complete pool set (docs/protocols/aquarius.md: "pool
+      enumeration not yet pinned"). Until enumerated, no gate is possible.
+- [ ] **comet** — has NO factory namespace (shared `("POOL",…)` topic). Decide the
+      gate design: a curated pool allowlist OR a WASM-hash gate (only decode
+      contracts whose code-hash matches the Balancer-v1 Comet WASM). Needs the
+      WASM hash + a design call.
+Once each source's factory/allowlist is confirmed, wiring the gate is a small
+mechanical change per source (add to `gatedSources`, make the decoder
+childgate-aware, gate `Matches()` on `reg.Has(contractID)`).
+
 ## Legal / vendor (before commercial launch — CS-115/116)
 - [ ] **Vendor-ToS review of raw CEX data redistribution** — `/v1/history` + `/v1/observations?
   source=binance` re-serve raw per-trade source-attributed records; Binance/Kraken/Coinbase
