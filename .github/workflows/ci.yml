@@ -131,6 +131,24 @@ jobs:
           name: coverage
           path: coverage.txt
 
+  integration-test:
+    name: integration tests (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go mod download
+      - name: make test-integration
+        # CS-070: the integration suite (testcontainers-go — spins
+        # TimescaleDB/Redis/MinIO) was only COMPILED in CI (the unit job's
+        # test-integration-build step), never RUN. ubuntu-latest ships a
+        # Docker daemon, so testcontainers works here. 10-min cap matches
+        # the Makefile target.
+        run: make test-integration
+
   # ────────────────────────────────────────────────────────────────
   # Policy checks — keep the repo enterprise-grade per
   # docs/discovery/engineering-standards.md.
