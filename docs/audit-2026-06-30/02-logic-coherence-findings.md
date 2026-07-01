@@ -73,12 +73,29 @@ rendering (`—`); reduced-motion; focus-visible; text-scale tuned for AA;
 | **LC-056** | P1 (UX) | **Slow public views show a bare "Loading…" line, not a skeleton.** The exact slow pages (`/protocols` 5-17s, `/v1/tx` ~6s, `/markets`) render one muted text line for the entire wait; a `Skeleton` component exists + is used in the dashboard but not on the public data-heavy views. First-run users stare at one line for up to 17s. |
 | (good) | — | Empty + error branches are otherwise handled well; null fields render `—`/`N/A`, not `null`/`$0`/`NaN` (except LC-055's HomeTopMovers). |
 
-## Still-open workstreams (lower priority)
+## W6 — Onboarding / dashboard / pricing-product coherence — executed
 
-- **W6** onboarding/dashboard/pricing-product coherence (the pricing product is
-  barely surfaced in the explorer; signup→verify→key→first-call journey). — not walked.
-- **W9** user-facing copy terminology (currency/coin/rates → asset/price). — folds
-  into LC-030; not separately executed.
+Core golden path works (magic-link → code → account-on-first-sight → dashboard;
+key mint→reveal→copy); **the prior key-issuance bugs are FIXED** (rek_/sip_ prefix,
+"last used 2055", instant-revoked — `dashboardkeys/handlers.go` `nilIfZero` + `sip_`).
+Gaps are discoverability + route/doc coherence:
+
+| ID | Sev | Finding |
+|----|-----|---------|
+| **LC-060** | **P0** | **Pricing product invisible on the landing page + primary nav — the commercial funnel leaks at the top.** The flagship *is* the pricing API, but the landing sells only "the protocol explorer"; the API section says "no auth, no API key"; nowhere does a visitor learn there are accounts/keys/tiers/SLAs. Primary nav "Developers" has docs/SDK/status but **no Pricing, no Sign-up**. `/pricing` is well-built but unreachable from where a first-timer looks. *Fix:* landing API-product section + "Get an API key →" CTA; add Pricing to primary nav; hero secondary CTA to `/pricing`. |
+| **LC-061** | P1 | **Onboarding "first request" hint is a 404.** Dashboard `GettingStarted` step 3 = `GET /v1/price/XLM-USD`, but only `GET /v1/price?asset=&quote=` exists (no path route; `XLM` should be `native`) → a new dev's *first* copy-pasted call 404s. *Fix:* use `?asset=native&quote=fiat:USD` (reuse the home snippet). |
+| **LC-062** | P1 | **Two doc destinations** (in-app `/docs` vs external `docs.stellarindex.io`, primary nav + hero + dashboard all point external; in-app reachable only via footer) + **inconsistent auth teaching** (`/docs` teaches `Authorization: Bearer`; dashboard/checklist teach `X-API-Key`). *Fix:* declare one canonical doc + unify on `X-API-Key`. (Operator: verify `docs.stellarindex.io` isn't a dead-end — not in this repo.) |
+| **LC-063** | P2 | No bridge from the anonymous first-call → "now get a key for higher limits." |
+| **LC-064** | P2 | **Business tier says 50,000 req/min on `/pricing`+`/signup` but 60,000 in the backend (`account.go`), `account-format.ts`, and the dashboard** — marketing contradicts the ladder on the page meant to close the sale. |
+| **LC-065** | P2 | "Manage plan" overview CTA over-promises self-service billing (Stripe deferred; just routes to a `mailto:sales`). *Fix:* relabel "View plan". |
+
+(LC-060/061 reinforce that LC-020 — the `/account/*` vs `/dashboard/*` nav split — also
+causes reload+redirect on every signed-in click and a hard 404 off-Cloudflare.)
+
+## Still-open (folded, not separately executed)
+
+- **W9** user-facing copy terminology (currency/coin/rates → asset/price) — folds
+  into LC-030.
 
 ## Remediation roadmap
 

@@ -1,7 +1,60 @@
 ---
 title: Audit 2026-06-30 — synthesis & executive summary
-status: Wave-1 + data-correctness + a11y complete; Wave-2/3/4 surface-mapped (see coverage honesty)
+status: COMPLETE — all 34 system areas + 7 cross-cutting hunts + full Audit-2 (incl. a11y + onboarding) executed with adversarial verification
 ---
+
+> **FULL-EXECUTION UPDATE.** Every area in PLAN-1's 34-area map and every Audit-2
+> workstream has now been executed by an independent adversarial reviewer with a
+> refute-pass. Headline: **0 Critical, ~24 High, ~30 Medium, ~40 Low** (`CS-001…
+> CS-131`) plus the Audit-2 `LC-###` set. The system is architecturally sound —
+> most Highs cluster in **operational/DR, infra-hardening, CI-governance, the
+> completeness/divergence trust story, and decoder-gating** — not in the core
+> data path (ingest, decode numerics, aggregation math, auth primitives, storage
+> integrity all largely verified GOOD). The earlier "~6 High" figure was Wave-1
+> only; the exhaustive pass found the rest.
+>
+> ### The ~24 High findings, grouped
+> **Availability / crash:** CS-012 SSE send-on-closed-channel → process crash ·
+> CS-013 SSE FD-exhaustion DoS.
+> **Served-value correctness:** CS-010 XLM circulating==total → market cap +58%
+> (root cause: `sdf_reserve_accounts=[]` + a dishonest basis label).
+> **Data-integrity / silent loss:** CS-028 cursor advances on enqueue not durable
+> write (silent loss for census-uncovered sources on hard crash).
+> **Trust story (completeness + divergence):** CS-083 watermark overwrite →
+> `complete=true` at a stale tip · CS-084 `-ch` reconcile nets discrepancies to 0 ·
+> CS-087 divergence silently passes when references are down (XLM/USD can never
+> fire) · CS-088 the divergence alert can't see reference outages.
+> **Decoder trust:** CS-026 comet/aquarius/phoenix/defindex gate on topic bytes →
+> look-alike contracts inject fabricated trades · CS-127 CLAUDE.md falsely claims
+> only Comet is ungated.
+> **Security:** CS-009 CF OG-function SSRF · CS-100 `org_verified` computed but not
+> enforced → issuer impersonation · CS-124 dashboard CSRF (SameSite=None, no token).
+> **Infra hardening:** CS-118 app services deploy as root · CS-119 `stellarindex`
+> user never created · CS-120 SSH password-auth gate inverts on a string override ·
+> CS-121 alertmanager `apply.sh` writes Discord webhook secrets 0644 · CS-122
+> Patroni unauth REST on 0.0.0.0.
+> **Disaster recovery:** CS-110 restore never drilled · CS-111 backups co-located
+> with the DB (single failure domain) · CS-112 ClickHouse lake has NO backup.
+> **CI/CD governance:** CS-097 unprotected `main` → all gates advisory · CS-098
+> gates bypassable by editing their own allowlist · CS-099 migrations not rolled
+> back on failed deploy.
+>
+> ### What's verified GOOD (the reassuring half — as important as the findings)
+> i128 discipline (zero truncation sites, all decoders) · one-writer projector
+> invariant (registry↔sink lockstep) · aggregation math (VWAP/TWAP/outlier/class-
+> gating, stablecoin map) · storage integrity (SQL-injection-clean, NUMERIC exact,
+> coarse-PK refuted, idempotent) · ClickHouse core (dedup + hash-chain-to-genesis
+> actually checked) · auth primitives (JWT alg-confusion, SEP-10 replay, API-key
+> constant-time, revocation split-brain guarded, XFF spoofing closed) · IDOR
+> surface (8 candidates refuted) · webhook SSRF+HMAC+queue-race + Stripe dedup ·
+> config-tag drift (now guarded by a passing test) · rate-limit fail-open-forever
+> (fixed) · SSRF guard on SEP-1 fetch (excellent) · CEX connector scaling/secrets ·
+> no secrets in the frontend bundle · admin data server-gated · retention drift
+> clean on r1 · all critical alerts fire on live emitters · supply-chain SHA-pins.
+>
+> Full detail: [01-cold-system-findings.md](01-cold-system-findings.md) (CS-###) +
+> [02-logic-coherence-findings.md](02-logic-coherence-findings.md) (LC-###).
+> The pre-full-execution roll-up below is retained for continuity.
 
 # Synthesis — what the two audits found
 
