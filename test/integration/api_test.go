@@ -62,15 +62,18 @@ func TestAPI_EndToEnd(t *testing.T) {
 		}
 	}
 
-	// Force-refresh prices_1m so the /v1/markets sub-test sees the
-	// seeded trades. /v1/markets reads from prices_1m (the 1-min
-	// CAGG) rather than the raw trades table — without an explicit
-	// refresh the seeded trades are present in trades but absent
-	// from prices_1m until the 30s policy fires.
-	if _, err := store.DB().ExecContext(ctx,
+	// Force-refresh the CAGGs /v1/markets reads so it sees the seeded
+	// trades before the 30s policy fires. /v1/markets (DistinctPairs)
+	// enumerates pairs from prices_1d (the right-granularity rewrite, #20)
+	// and reads 24h volume from prices_1m — refresh BOTH, else the market
+	// list is empty even though prices_1m has the rows.
+	for _, stmt := range []string{
 		`CALL refresh_continuous_aggregate('prices_1m', NULL, NULL)`,
-	); err != nil {
-		t.Fatalf("refresh prices_1m: %v", err)
+		`CALL refresh_continuous_aggregate('prices_1d', NULL, NULL)`,
+	} {
+		if _, err := store.DB().ExecContext(ctx, stmt); err != nil {
+			t.Fatalf("refresh cagg: %v", err)
+		}
 	}
 
 	// Same force-refresh for pools_per_source_1h (migration 0036 —

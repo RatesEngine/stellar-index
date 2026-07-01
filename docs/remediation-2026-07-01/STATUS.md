@@ -9,16 +9,16 @@ scope: correctness/security audit (docs/audit-2026-06-30) + maintainability audi
 Tracks the fix-everything pass over both audits. Operator-only items live in
 [audit-remediation-operator-actions.md](../operations/audit-remediation-operator-actions.md).
 
-> **Open follow-up (agent, discovered 2026-07-01 by CS-070):** wiring the
-> integration suite into CI surfaced pre-existing **test rot** — the suite was
-> only ever *compiled*, never *run*, so several tests fail on first run:
-> `TestFXQuoteAtOrBefore/FXSources` (stale: expects 2 FX sources, got 3 after
-> `massive` joined the registry — a 1-line assertion fix), and a cluster of
-> data-setup gaps (`TestAPI_EndToEnd//v1/markets`, `TestTradesInRangeAndMarkets`,
-> `TestBlendEmissionsRoundTrip`/`AdminRoundTrip` all get `0 markets`/`0 rows`
-> where the fixtures should seed them — needs investigation). The CI job is
-> `continue-on-error` (non-blocking) until the suite is green; flip it to a
-> required gate once fixed. Not launch-blocking (unit + build + lint all green).
+> **Resolved (2026-07-01):** wiring the integration suite into CI (CS-070)
+> surfaced pre-existing **test rot** — the suite was only ever *compiled*, never
+> *run*, so it had drifted. All fixed + the full suite is green + the CI job is
+> now a BLOCKING gate: (1) `TestFXQuoteAtOrBefore/FXSources` stale assertion
+> (`massive` joined the FX registry); (2) `TestAPI_EndToEnd//v1/markets` +
+> `TestTradesInRangeAndMarkets` refreshed only `prices_1m` but `DistinctPairs`
+> enumerates pairs from `prices_1d` (the #20 right-granularity rewrite) — now
+> refresh both; (3) the Blend round-trip tests substring-matched compact JSON
+> against a postgres jsonb column that pretty-prints with spaces — the `contains`
+> helper is now whitespace-insensitive.
 Each fix landed as its own commit on `main` (see `git log`).
 
 ## ✅ Fixed (code/config, this pass)

@@ -420,9 +420,22 @@ func hexNibble(n int) byte {
 	return tab[n&0xF]
 }
 
-// contains is a tiny strings.Contains shim — keeps the test file's
-// import list narrow.
+// contains reports whether sub appears in s, IGNORING ASCII spaces in s.
+// The blend attributes are read via `attributes::text` (a postgres jsonb
+// column), which pretty-prints with a space after every ':' and ',' — but
+// the expected substrings here are compact (`"eps":1000000`). The stored
+// values carry no internal spaces, so stripping spaces from the haystack
+// makes these checks robust to jsonb's text formatting (and its
+// non-deterministic key order, since each `"key":value` pair is matched
+// independently). Kept import-free to keep the test file's imports narrow.
 func contains(s, sub string) bool {
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' {
+			b = append(b, s[i])
+		}
+	}
+	s = string(b)
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
 			return true

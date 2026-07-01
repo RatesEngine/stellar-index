@@ -134,14 +134,13 @@ jobs:
   integration-test:
     name: integration tests (Docker)
     runs-on: ubuntu-latest
-    # NON-BLOCKING (CS-070): the suite was only ever COMPILED in CI, never
-    # run, so it accumulated rot — several tests fail on first run (stale
-    # assertions like the FXSources count after `massive` was added to the
-    # registry, and data-setup gaps that expect pre-seeded markets). Running
-    # it here SURFACES that rot without red-lighting main. Flip
-    # continue-on-error off (make it a required gate) once the suite is green
-    # again — tracked in docs/operations/audit-remediation-operator-actions.md.
-    continue-on-error: true
+    # BLOCKING (CS-070). Wiring this job first surfaced accumulated rot (the
+    # suite was only ever compiled, never run) — all fixed 2026-07-01: the
+    # stale FXSources assertion (massive joined the registry), the markets
+    # tests that only refreshed prices_1m when DistinctPairs enumerates from
+    # prices_1d, and the blend jsonb-attribute checks (compact substrings vs
+    # postgres's spaced ::text). The full suite is green, so this is now a
+    # required gate.
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6

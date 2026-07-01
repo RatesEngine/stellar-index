@@ -106,10 +106,16 @@ func TestTradesInRangeAndMarkets(t *testing.T) {
 	// present in `trades` but absent from `prices_1m` until the
 	// 30 s policy fires (longer than the test window). Mirrors the
 	// pattern in test/integration/api_test.go:65-74.
-	if _, err := store.DB().ExecContext(ctx,
+	// DistinctPairs enumerates pairs from prices_1d (the right-granularity
+	// rewrite, #20) and reads 24h volume from prices_1m — refresh BOTH, or
+	// the pair list comes back empty even though prices_1m has the rows.
+	for _, stmt := range []string{
 		`CALL refresh_continuous_aggregate('prices_1m', NULL, NULL)`,
-	); err != nil {
-		t.Fatalf("refresh prices_1m: %v", err)
+		`CALL refresh_continuous_aggregate('prices_1d', NULL, NULL)`,
+	} {
+		if _, err := store.DB().ExecContext(ctx, stmt); err != nil {
+			t.Fatalf("refresh cagg: %v", err)
+		}
 	}
 
 	markets, next, err := store.DistinctPairs(ctx, "", 500)

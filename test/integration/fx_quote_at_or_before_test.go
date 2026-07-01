@@ -144,7 +144,9 @@ func TestFXQuoteAtOrBefore(t *testing.T) {
 
 	t.Run("FXSources is deterministic and lex-ordered", func(t *testing.T) {
 		got := external.FXSources()
-		want := []string{"exchangeratesapi", "polygon-forex"}
+		// massive (the forex worker's fx_quotes feed) was bridged into the
+		// registry as a SubclassFX source (P0-7) — lex-sorted between the two.
+		want := []string{"exchangeratesapi", "massive", "polygon-forex"}
 		if len(got) != len(want) {
 			t.Fatalf("FXSources len=%d, want %d (%v)", len(got), len(want), got)
 		}
