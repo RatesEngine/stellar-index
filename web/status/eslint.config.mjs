@@ -16,12 +16,12 @@ const eslintConfig = [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       // eslint-config-next 16 turns on the React Compiler react-hooks rules;
-      // adopt them as advisory (warn) for now (see web/explorer's config).
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/static-components': 'warn',
-      'react-hooks/purity': 'warn',
-      'react-hooks/immutability': 'warn',
-      'react-hooks/refs': 'warn',
+      // enforced as ERRORS (see web/explorer's config for the rationale).
+      'react-hooks/set-state-in-effect': 'error',
+      'react-hooks/static-components': 'error',
+      'react-hooks/purity': 'error',
+      'react-hooks/immutability': 'error',
+      'react-hooks/refs': 'error',
     },
   },
 ];

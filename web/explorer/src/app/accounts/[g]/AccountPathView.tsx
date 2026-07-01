@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLastPathSegment } from '@/lib/useLastPathSegment';
 
 import { AccountView } from '../AccountView';
 
@@ -9,11 +9,6 @@ import { AccountView } from '../AccountView';
 // built shell for any /accounts/{g}; richlist/named accounts get pre-rendered
 // + indexed later (SEO plan D6).
 export function AccountPathView() {
-  const [id, setId] = useState('');
-  useEffect(() => {
-    const seg =
-      window.location.pathname.replace(/\/+$/, '').split('/').pop() ?? '';
-    setId(decodeURIComponent(seg));
-  }, []);
+  const id = useLastPathSegment();
   return <AccountView id={id} />;
 }

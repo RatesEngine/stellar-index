@@ -70,19 +70,24 @@ export function DonutChart({
   const cx = size / 2;
   const cy = size / 2;
 
-  let acc = 0;
+  // Prefix-sum the cumulative fraction up front so the .map() callback
+  // stays pure (no external accumulator mutated inside the map).
+  const cumulativeBefore: number[] = [];
+  let running = 0;
+  for (const s of slices) {
+    cumulativeBefore.push(running);
+    running += s.value / total;
+  }
   const segs = slices.map((s, i) => {
     const frac = s.value / total;
-    const seg = {
+    return {
       ...s,
       color: s.color ?? PALETTE[i % PALETTE.length],
       frac,
       dash: frac * c,
-      offset: -acc * c,
+      offset: -cumulativeBefore[i] * c,
       pct: frac * 100,
     };
-    acc += frac;
-    return seg;
   });
 
   return (

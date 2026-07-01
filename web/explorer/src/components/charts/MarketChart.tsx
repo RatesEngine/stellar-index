@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useQuery } from '@tanstack/react-query';
 
 import { API_BASE_URL } from '@/api/client';
 
@@ -65,40 +66,29 @@ export function MarketChart({
   defaultTimeframe?: TF;
 }) {
   const [tf, setTf] = useState<TF>(defaultTimeframe);
-  const [data, setData] = useState<Bar[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const spec = TIMEFRAMES.find((t) => t.key === tf) ?? TIMEFRAMES[1];
 
-  useEffect(() => {
-    const spec = TIMEFRAMES.find((t) => t.key === tf) ?? TIMEFRAMES[1];
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    const url = `${API_BASE_URL}/v1/ohlc?base=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}&interval=${spec.interval}&limit=${spec.limit}`;
-    fetch(url, { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ data?: { intervals?: OHLCBar[] } }>;
-      })
-      .then((env) => {
-        const bars = (env.data?.intervals ?? []).map((b) => ({
-          time: Math.floor(new Date(b.t).getTime() / 1000),
-          open: Number(b.o),
-          high: Number(b.h),
-          low: Number(b.l),
-          close: Number(b.c),
-          volume: Number(b.v_quote),
-        }));
-        setData(bars);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        if (err.name === 'AbortError') return;
-        setError(err.message);
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [base, quote, tf]);
+  const query = useQuery<Bar[], Error>({
+    queryKey: ['/v1/ohlc', base, quote, spec.interval, spec.limit],
+    queryFn: async ({ signal }) => {
+      const url = `${API_BASE_URL}/v1/ohlc?base=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}&interval=${spec.interval}&limit=${spec.limit}`;
+      const r = await fetch(url, { signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const env = (await r.json()) as { data?: { intervals?: OHLCBar[] } };
+      return (env.data?.intervals ?? []).map((b) => ({
+        time: Math.floor(new Date(b.t).getTime() / 1000),
+        open: Number(b.o),
+        high: Number(b.h),
+        low: Number(b.l),
+        close: Number(b.c),
+        volume: Number(b.v_quote),
+      }));
+    },
+  });
+
+  const data = query.data ?? [];
+  const loading = query.isLoading;
+  const error = query.error ? query.error.message : null;
 
   return (
     <div className="space-y-3">

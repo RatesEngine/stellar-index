@@ -508,6 +508,45 @@ function EventBreakdown({
 
 // ─── Contract roster ─────────────────────────────────────────────────────────
 
+type RosterSortKey = 'events' | 'last_seen';
+
+// Header cell for a sortable column — a real <button> with aria-sort on the
+// <th>, so screen readers announce the active sort + the toggle is operable.
+// Hoisted to module scope (rather than defined inside ContractRoster) so it
+// keeps a stable identity across renders; the active sort key + setter are
+// passed as explicit props.
+function SortHeader({
+  label,
+  keyName,
+  sortKey,
+  setSortKey,
+}: {
+  label: string;
+  keyName: RosterSortKey;
+  sortKey: RosterSortKey;
+  setSortKey: (k: RosterSortKey) => void;
+}) {
+  const active = sortKey === keyName;
+  return (
+    <th
+      scope="col"
+      className="px-4 py-2 text-right"
+      aria-sort={active ? 'descending' : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => setSortKey(keyName)}
+        className={`ml-auto flex items-center gap-1 rounded-sm uppercase tracking-wider focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/60 ${active ? 'text-brand-600' : 'hover:text-ink-body'}`}
+      >
+        {label}
+        <span aria-hidden className="text-[8px]">
+          {active ? '▼' : '↕'}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function ContractRoster({
   contracts,
   analyticsAvailable,
@@ -556,36 +595,6 @@ function ContractRoster({
     );
   }
 
-  // Header cell for a sortable column — a real <button> with aria-sort on the
-  // <th>, so screen readers announce the active sort + the toggle is operable.
-  const SortHeader = ({
-    label,
-    keyName,
-  }: {
-    label: string;
-    keyName: 'events' | 'last_seen';
-  }) => {
-    const active = sortKey === keyName;
-    return (
-      <th
-        scope="col"
-        className="px-4 py-2 text-right"
-        aria-sort={active ? 'descending' : 'none'}
-      >
-        <button
-          type="button"
-          onClick={() => setSortKey(keyName)}
-          className={`ml-auto flex items-center gap-1 rounded-sm uppercase tracking-wider focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/60 ${active ? 'text-brand-600' : 'hover:text-ink-body'}`}
-        >
-          {label}
-          <span aria-hidden className="text-[8px]">
-            {active ? '▼' : '↕'}
-          </span>
-        </button>
-      </th>
-    );
-  };
-
   return (
     <Panel
       title={`Contract roster (${contracts.length})`}
@@ -608,8 +617,18 @@ function ContractRoster({
                   Pair
                 </th>
               )}
-              <SortHeader label="Events" keyName="events" />
-              <SortHeader label="Last seen" keyName="last_seen" />
+              <SortHeader
+                label="Events"
+                keyName="events"
+                sortKey={sortKey}
+                setSortKey={setSortKey}
+              />
+              <SortHeader
+                label="Last seen"
+                keyName="last_seen"
+                sortKey={sortKey}
+                setSortKey={setSortKey}
+              />
             </tr>
           </thead>
           <tbody className="divide-y divide-line-subtle">

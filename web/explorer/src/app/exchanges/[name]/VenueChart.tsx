@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { apiGet, asExample } from '@/api/client';
 import { Panel } from '@/components/reveal';
@@ -19,36 +20,32 @@ interface Market {
  * switches between the venue's pairs.
  */
 export function VenueChart({ venue }: { venue: string }) {
-  const [pairs, setPairs] = useState<Market[]>([]);
-  const [selected, setSelected] = useState<{ base: string; quote: string } | null>(null);
-  const [pairsLoading, setPairsLoading] = useState(true);
-  const [pairsError, setPairsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setPairsLoading(true);
-    setPairsError(null);
-    apiGet<{ data: Market[] }>('/v1/markets', {
-      source: venue,
-      order_by: 'volume_24h_usd_desc',
-      limit: 200,
-    })
-      .then((env) => {
-        if (cancelled) return;
-        const list = env.data ?? [];
-        setPairs(list);
-        if (list[0]) setSelected({ base: list[0].base, quote: list[0].quote });
-        setPairsLoading(false);
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setPairsError(err.message);
-        setPairsLoading(false);
+  const pairsQuery = useQuery<Market[], Error>({
+    queryKey: ['/v1/markets', venue, 'venuechart'],
+    queryFn: async () => {
+      const env = await apiGet<{ data: Market[] }>('/v1/markets', {
+        source: venue,
+        order_by: 'volume_24h_usd_desc',
+        limit: 200,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [venue]);
+      return env.data ?? [];
+    },
+  });
+
+  const pairs = pairsQuery.data ?? [];
+  const pairsLoading = pairsQuery.isLoading;
+  const pairsError = pairsQuery.error ? pairsQuery.error.message : null;
+
+  const [selected, setSelected] = useState<{ base: string; quote: string } | null>(null);
+  // Default-select the venue's top pair once its list resolves, and
+  // re-default if the venue prop changes. Adjust state during render
+  // (tracking the venue we've defaulted against) rather than in an
+  // effect — mirrors the previous `setSelected(list[0])` on load.
+  const [defaultedFor, setDefaultedFor] = useState<string | null>(null);
+  if (!pairsLoading && defaultedFor !== venue) {
+    setDefaultedFor(venue);
+    setSelected(pairs[0] ? { base: pairs[0].base, quote: pairs[0].quote } : null);
+  }
 
   if (pairsLoading) {
     return (

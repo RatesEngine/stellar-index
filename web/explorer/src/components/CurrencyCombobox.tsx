@@ -44,9 +44,16 @@ export function CurrencyCombobox({
     return tickers.filter((t) => t.includes(q));
   }, [tickers, query]);
 
-  useEffect(() => {
+  // Reset the highlighted row to the top whenever the query text or the
+  // open state changes. Adjust state during render (prev-value compare)
+  // instead of an effect so there's no extra commit.
+  const [prevQuery, setPrevQuery] = useState(query);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (query !== prevQuery || open !== prevOpen) {
+    setPrevQuery(query);
+    setPrevOpen(open);
     setHighlight(0);
-  }, [query, open]);
+  }
 
   useEffect(() => {
     if (!open) return;

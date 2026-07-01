@@ -1,7 +1,8 @@
 'use client';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import {
   ApiError,
@@ -57,29 +58,33 @@ export default function KeysPage() {
 }
 
 function KeysBody({ me }: { me: MeResponse }) {
-  const [keys, setKeys] = useState<APIKey[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const keysQuery = useQuery<APIKey[], Error>({
+    queryKey: ['dashboard', 'keys'],
+    queryFn: ({ signal }) => listKeys(signal),
+  });
+  const keys = keysQuery.data ?? null;
+
+  const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<CreateKeyResponse | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      setError(null);
-      setKeys(await listKeys());
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? (err.detail ?? err.message)
-          : 'Failed to load keys',
-      );
-    }
-  }, []);
+  // Displayed error: a revoke/create failure takes precedence, otherwise
+  // surface a keys-load failure (mirrors the old single `error` state,
+  // which was set by both the loader and the mutation handlers).
+  const loadError = keysQuery.error
+    ? keysQuery.error instanceof ApiError
+      ? (keysQuery.error.detail ?? keysQuery.error.message)
+      : 'Failed to load keys'
+    : null;
+  const error = actionError ?? loadError;
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const refresh = useCallback(async () => {
+    setActionError(null);
+    await queryClient.invalidateQueries({ queryKey: ['dashboard', 'keys'] });
+  }, [queryClient]);
 
   async function handleRevoke(key: APIKey) {
     if (
@@ -94,7 +99,7 @@ function KeysBody({ me }: { me: MeResponse }) {
       setNotice(`Key "${key.name}" revoked.`);
       await refresh();
     } catch (err) {
-      setError(
+      setActionError(
         err instanceof ApiError ? (err.detail ?? err.message) : 'Revoke failed',
       );
     }
@@ -141,7 +146,7 @@ function KeysBody({ me }: { me: MeResponse }) {
             tier={tier}
             creating={creating}
             setCreating={setCreating}
-            onError={setError}
+            onError={setActionError}
             onCreated={(resp) => {
               setNewKey(resp);
               setNotice(null);

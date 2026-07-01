@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
@@ -119,11 +119,11 @@ export function AssetConverter({
   // Once any currency outside the FEATURED set is picked
   // (e.g. via the searchable combobox typing "ZAR"), promote to
   // showAll mode so the combobox keeps the long-tail list visible.
-  useEffect(() => {
-    if (!showAll && tickerSet.has(target) && !FEATURED.includes(target)) {
-      setShowAll(true);
-    }
-  }, [target, showAll, tickerSet]);
+  // Adjust state during render rather than in an effect — the guard on
+  // `!showAll` makes this idempotent (fires at most once per promotion).
+  if (!showAll && tickerSet.has(target) && !FEATURED.includes(target)) {
+    setShowAll(true);
+  }
 
   return (
     <Panel

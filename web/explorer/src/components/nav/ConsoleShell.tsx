@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, TrendingUp, X } from 'lucide-react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 
 import { useDialog } from '@/lib/useDialog';
 
@@ -20,9 +20,14 @@ import { Sidebar, SidebarNav } from './Sidebar';
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
-  useEffect(() => {
+  // Close the drawer whenever the route changes. Adjusting state during
+  // render (comparing against the previous pathname) rather than in an
+  // effect — no commit/paint of the open drawer on navigation.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setDrawer(false);
-  }, [pathname]);
+  }
   // LC-051: the mobile drawer is the primary mobile nav — give it the full
   // modal contract (Escape + focus trap + focus move-in/restore), not just
   // Escape. The shared hook handles all of it.

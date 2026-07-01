@@ -16,15 +16,16 @@ const eslintConfig = [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       // eslint-config-next 16 turns on the React Compiler react-hooks rules.
-      // Adopt them as ADVISORY (warn) for now: they flag ~21 pre-existing
-      // patterns (mostly intentional setState-in-effect for client-hydration
-      // reads). Promoting to error + fixing each site is a tracked
-      // code-quality pass, out of scope for the dependency upgrade.
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/static-components': 'warn',
-      'react-hooks/purity': 'warn',
-      'react-hooks/immutability': 'warn',
-      'react-hooks/refs': 'warn',
+      // Enforced as ERRORS: every flagged site has been refactored to the
+      // React Compiler-safe pattern (data-fetching effects → react-query,
+      // reset-state effects → adjust-state-during-render, in-render impurity
+      // → module helpers / effects). New violations must be fixed, not
+      // downgraded.
+      'react-hooks/set-state-in-effect': 'error',
+      'react-hooks/static-components': 'error',
+      'react-hooks/purity': 'error',
+      'react-hooks/immutability': 'error',
+      'react-hooks/refs': 'error',
     },
   },
 ];

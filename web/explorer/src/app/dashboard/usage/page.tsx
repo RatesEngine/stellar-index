@@ -1,7 +1,7 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { BarChart3, Gauge, KeyRound } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 
 import {
   ApiError,
@@ -55,33 +55,30 @@ export default function UsagePage() {
 }
 
 function UsageBody({ me }: { me: MeResponse }) {
-  const [keys, setKeys] = useState<APIKey[] | null>(null);
-  const [usage, setUsage] = useState<UsageRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const keysQuery = useQuery<APIKey[], Error>({
+    queryKey: ['dashboard', 'keys'],
+    queryFn: ({ signal }) => listKeys(signal),
+  });
+  // Daily request totals are best-effort — swallow failures to [] so the
+  // page never blocks on the usage backend (matches prior behavior).
+  const usageQuery = useQuery<UsageRow[], Error>({
+    queryKey: ['dashboard', 'usage'],
+    queryFn: async ({ signal }) => {
+      try {
+        return await fetchUsage(signal);
+      } catch {
+        return [];
+      }
+    },
+  });
 
-  const refresh = useCallback(async () => {
-    try {
-      setError(null);
-      setKeys(await listKeys());
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? (err.detail ?? err.message)
-          : 'Failed to load usage',
-      );
-    }
-    // Daily request totals are best-effort — don't block the page if
-    // the usage backend isn't wired (returns [] in that case anyway).
-    try {
-      setUsage(await fetchUsage());
-    } catch {
-      setUsage([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const keys = keysQuery.data ?? null;
+  const usage = usageQuery.data ?? null;
+  const error = keysQuery.error
+    ? keysQuery.error instanceof ApiError
+      ? (keysQuery.error.detail ?? keysQuery.error.message)
+      : 'Failed to load usage'
+    : null;
 
   const active = keys?.filter((k) => !k.revoked_at) ?? [];
 

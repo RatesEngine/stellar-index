@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLastPathSegment } from '@/lib/useLastPathSegment';
 
 import { TxView } from '../../tx/TxView';
 
@@ -16,11 +16,6 @@ import { TxView } from '../../tx/TxView';
  * existing TxView.
  */
 export function TxPathView() {
-  const [hash, setHash] = useState('');
-  useEffect(() => {
-    const seg =
-      window.location.pathname.replace(/\/+$/, '').split('/').pop() ?? '';
-    setHash(decodeURIComponent(seg));
-  }, []);
+  const hash = useLastPathSegment();
   return <TxView hash={hash} />;
 }

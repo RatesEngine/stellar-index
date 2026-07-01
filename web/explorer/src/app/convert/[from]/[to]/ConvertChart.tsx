@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
 import { API_BASE_URL, asExample } from '@/api/client';
@@ -33,38 +34,27 @@ interface ChartPoint {
  */
 export function ConvertChart({ from, to }: { from: string; to: string }) {
   const [tf, setTf] = useState<TF>('1mo');
-  const [data, setData] = useState<{ time: number; value: number }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const spec = TIMEFRAMES.find((t) => t.key === tf) ?? TIMEFRAMES[1];
 
-  useEffect(() => {
-    const spec = TIMEFRAMES.find((t) => t.key === tf) ?? TIMEFRAMES[1];
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    const url = `${API_BASE_URL}/v1/chart?asset=fiat:${encodeURIComponent(from)}&quote=fiat:${encodeURIComponent(to)}&timeframe=${tf}&granularity=${spec.granularity}`;
-    fetch(url, { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ data?: { points?: ChartPoint[] } }>;
-      })
-      .then((env) => {
-        const pts = (env.data?.points ?? [])
-          .map((p) => ({
-            time: Math.floor(new Date(p.t).getTime() / 1000),
-            value: p.p != null ? Number(p.p) : NaN,
-          }))
-          .filter((p) => Number.isFinite(p.value));
-        setData(pts);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        if (err.name === 'AbortError') return;
-        setError(err.message);
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [from, to, tf]);
+  const query = useQuery<{ time: number; value: number }[], Error>({
+    queryKey: ['/v1/chart', from, to, tf, spec.granularity],
+    queryFn: async ({ signal }) => {
+      const url = `${API_BASE_URL}/v1/chart?asset=fiat:${encodeURIComponent(from)}&quote=fiat:${encodeURIComponent(to)}&timeframe=${tf}&granularity=${spec.granularity}`;
+      const r = await fetch(url, { signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const env = (await r.json()) as { data?: { points?: ChartPoint[] } };
+      return (env.data?.points ?? [])
+        .map((p) => ({
+          time: Math.floor(new Date(p.t).getTime() / 1000),
+          value: p.p != null ? Number(p.p) : NaN,
+        }))
+        .filter((p) => Number.isFinite(p.value));
+    },
+  });
+
+  const data = query.data ?? [];
+  const loading = query.isLoading;
+  const error = query.error ? query.error.message : null;
 
   return (
     <Panel

@@ -456,9 +456,21 @@ export default function StatusPageClient({
   const [asOf, setAsOf] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Seed the static (auth / streaming) endpoints once via the lazy
+  // initializer — they never get a fetch fired against them, so their
+  // labels are derivable up front rather than painted by a setState in
+  // the probe effect. GET endpoints fill in as their probes resolve.
   const [endpointHealth, setEndpointHealth] = useState<
     Record<string, EndpointProbeResult>
-  >({});
+  >(() => {
+    const init: Record<string, EndpointProbeResult> = {};
+    for (const ep of PUBLIC_ENDPOINTS) {
+      if (ep.probe.kind !== 'get') {
+        init[ep.path] = { kind: 'static', label: ep.probe.kind };
+      }
+    }
+    return init;
+  });
   // Seed from the build-time corpus; the live feed overlays it on
   // a successful fetch.
   const [incidentHistory, setIncidentHistory] =
@@ -579,17 +591,8 @@ export default function StatusPageClient({
       });
     }
 
-    // Static labels (auth / streaming) — paint once at mount.
-    setEndpointHealth((prev) => {
-      const next = { ...prev };
-      for (const ep of PUBLIC_ENDPOINTS) {
-        if (ep.probe.kind !== 'get') {
-          next[ep.path] = { kind: 'static', label: ep.probe.kind };
-        }
-      }
-      return next;
-    });
-
+    // Static labels (auth / streaming) are seeded in the useState
+    // initializer above — nothing to paint here.
     runTier('hot');
     runTier('warm');
     const hotId = setInterval(() => runTier('hot'), POLL_INTERVAL_MS);
@@ -1511,11 +1514,9 @@ function FXBackfillCard({ fx }: { fx: IngestionSnapshot['fx_backfill'] }) {
 }
 
 function SupplyCard({ supply }: { supply: IngestionSnapshot['supply'] }) {
-  const ageS = supply.last_snapshot_at
-    ? Math.floor(
-        (Date.now() - new Date(supply.last_snapshot_at).getTime()) / 1000,
-      )
-    : null;
+  // Age is computed via a module-scope helper (like `timeSince`) so the
+  // impure `Date.now()` read stays out of the component's render body.
+  const ageS = snapshotAgeSeconds(supply.last_snapshot_at);
   return (
     <Panel title="Supply observers">
       <Row
@@ -1921,6 +1922,14 @@ function toneFor(status?: ServiceStatus): {
         badge: 'neutral',
       };
   }
+}
+
+// Seconds elapsed since an ISO timestamp, or null when absent. Kept at
+// module scope so the `Date.now()` read isn't a purity violation inside a
+// component's render (same rationale as `timeSince`).
+function snapshotAgeSeconds(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
 }
 
 function timeSince(iso: string): string {

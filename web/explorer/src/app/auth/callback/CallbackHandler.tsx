@@ -33,6 +33,7 @@ export function CallbackHandler() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     if (!token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- token is read from window.location, which only exists client-side; the verifying→error transition is a mount-time side effect with no render-derivable form.
       setState({
         kind: 'error',
         message: 'Missing token. Request a new sign-in link from /signin.',

@@ -292,13 +292,16 @@ export function SearchModal() {
 
   // Reset query each time the modal opens — the search cursor
   // should always start fresh, and stale state on re-open is
-  // surprising.
-  useEffect(() => {
+  // surprising. Adjust state during render (prev-value compare) so
+  // the reset happens on the open transition without an extra commit.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setQ('');
       setDebouncedQ('');
     }
-  }, [open]);
+  }
 
   // a11y (Q3): on open, remember the element to return focus to; on close,
   // restore it so keyboard/SR users aren't dumped on <body>.

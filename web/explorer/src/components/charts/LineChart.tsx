@@ -89,8 +89,13 @@ export function LineChart({
   // Hold the latest legend config in a ref so the (once-installed)
   // crosshair handler reads current formatters without re-creating the
   // chart on every render (the prop is usually an inline literal).
+  // Mirror the prop into the ref in an effect (runs after every render)
+  // rather than assigning during render — the crosshair handler only
+  // reads it on mouse-move, well after the commit.
   const legendCfgRef = useRef(legend);
-  legendCfgRef.current = legend;
+  useEffect(() => {
+    legendCfgRef.current = legend;
+  });
   const legendEnabled = !!legend;
 
   // Resolve trend tone — first vs last value when the caller doesn't

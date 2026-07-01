@@ -12,7 +12,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { ApiError, listKeys, type APIKey } from '@/api/account';
 import type { MeResponse } from '@/api/hooks';
@@ -55,25 +56,16 @@ export default function AccountOverviewPage() {
 }
 
 function OverviewBody({ me }: { me: MeResponse }) {
-  const [keys, setKeys] = useState<APIKey[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      setError(null);
-      setKeys(await listKeys());
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? (err.detail ?? err.message)
-          : 'Failed to load keys',
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const keysQuery = useQuery<APIKey[], Error>({
+    queryKey: ['dashboard', 'keys'],
+    queryFn: ({ signal }) => listKeys(signal),
+  });
+  const keys = keysQuery.data ?? null;
+  const error = keysQuery.error
+    ? keysQuery.error instanceof ApiError
+      ? (keysQuery.error.detail ?? keysQuery.error.message)
+      : 'Failed to load keys'
+    : null;
 
   return (
     <Container>
