@@ -74,7 +74,7 @@ seed_rpc_endpoint = "https://mainnet.sorobanrpc.com"
 # ──────────────────────────────────────────────────────────────────
 [aggregate]
 enable_stablecoin_fiat_proxy = true
-min_usd_volume = 0  # default 10000; r1 is on-chain-only until CEX connectors land — micro-volume XLM/USDC trades are the data we have, see r1-deployment-state.md
+min_usd_volume = 10000  # per-pair USD-volume floor for VWAP publication (anti-manipulation + confidence). Re-enabled 2026-07-01: the CEX connectors landed and flow live volume (binance/coinbase/kraken/bitstamp, millions of trades), so fiat:USD pairs clear $10k/window easily while thin/manipulable pairs are gated. (Was 0 during the on-chain-only bootstrap.)
 
 [trades]
 usd_pegged_classic_assets = [
