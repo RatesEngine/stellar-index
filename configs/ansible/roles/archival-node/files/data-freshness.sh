@@ -69,6 +69,19 @@ SELECT 'stellarindex_completeness_incomplete{source="'||source||'"} '||(NOT comp
           FROM completeness_snapshots ORDER BY source, computed_at DESC) s;
 SQL
 
+# CS-090: a verdict can read complete=true while its watermark lags the live
+# network head (a mid-walk stall or a manual small -to). complete/computed_at
+# alone can't see that, so emit the per-source lag (live ingest cursor tip −
+# verdict watermark) — a source verified only to an old ledger becomes
+# observable/alertable instead of showing a green "N/N complete" badge.
+psql "$STELLARINDEX_POSTGRES_DSN" -tA -F$'\t' >> "$TMP" <<'SQL'
+WITH tip AS (SELECT max(last_ledger) AS t FROM ingestion_cursors)
+SELECT 'stellarindex_completeness_watermark_lag_ledgers{source="'||s.source||'"} '
+       ||greatest(0, (SELECT t FROM tip) - s.watermark_ledger)::text
+  FROM (SELECT DISTINCT ON (source) source, watermark_ledger
+          FROM completeness_snapshots ORDER BY source, computed_at DESC) s;
+SQL
+
 # supply_flows (ClickHouse) is the per-token mint/burn/clawback set that backs
 # /v1/assets SEP-41 supply — TokenSupply() sums it FINAL on-demand, so its
 # freshness IS the served SEP-41 supply's freshness. Live-written by the

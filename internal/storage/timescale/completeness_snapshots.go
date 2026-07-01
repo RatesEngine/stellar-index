@@ -42,7 +42,16 @@ func (s *Store) UpsertCompletenessSnapshot(ctx context.Context, snap Completenes
             recognition_ok       = EXCLUDED.recognition_ok,
             projection_ok        = EXCLUDED.projection_ok,
             detail               = EXCLUDED.detail,
-            computed_at          = now()`
+            computed_at          = now()
+        -- CS-083: never let a regressive-window run (a smaller -to, or a
+        -- mid-walk stall) overwrite a more-advanced verdict — that's how a
+        -- source read complete=true pinned at a STALE tip. Apply the update
+        -- only when this run advanced (or held) the tip, OR it found a
+        -- problem (a newly-discovered problem must always be recorded, even
+        -- if it lowers the watermark). The tip is monotonic (network head
+        -- only grows), so a smaller tip means a stale/partial run.
+        WHERE EXCLUDED.tip_ledger >= completeness_snapshots.tip_ledger
+           OR EXCLUDED.first_problem_ledger > 0`
 	if _, err := s.db.ExecContext(ctx, q,
 		snap.Source, int64(snap.Genesis), int64(snap.Tip), int64(snap.Watermark),
 		snap.CoveragePct, snap.Complete, int64(snap.FirstProblem),
