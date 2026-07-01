@@ -141,6 +141,49 @@ RULES = [
     },
 ]
 
+MODULE = "github.com/StellarIndex/stellar-index/"
+
+# ─── Foundation-purity rules (D8 layering) ───────────────────────
+#
+# Each rule pins a FOUNDATION package to a maximum internal-dependency
+# set: files under `prefix` (excluding _test.go) may import module-local
+# packages ONLY from `allow_internal` (plus the package's own subtree).
+# Go already forbids import CYCLES; this forbids the coupling that leads to
+# them — it keeps the type/leaf layer safe to import from anywhere and stops
+# foundation code from creeping upward into the app layers.
+PURITY_RULES = [
+    {
+        "name": "P/canonical-foundation",
+        "prefix": "internal/canonical/",
+        "allow_internal": set(),
+        "why": "internal/canonical is THE canonical-types foundation; it must import only stdlib/third-party (no other internal package) so it stays a universally-safe import and can never anchor a cycle.",
+    },
+    {
+        "name": "P/nettools-leaf",
+        "prefix": "internal/nettools/",
+        "allow_internal": set(),
+        "why": "internal/nettools is a stdlib-only leaf (the canonical SSRF guard); keep it dependency-free so any layer can import it.",
+    },
+    {
+        "name": "P/external-scale-leaf",
+        "prefix": "internal/sources/external/scale/",
+        "allow_internal": set(),
+        "why": "internal/sources/external/scale is a stdlib-only amount-scaling leaf; keep it dependency-free (every connector imports it).",
+    },
+    {
+        "name": "P/version-leaf",
+        "prefix": "internal/version/",
+        "allow_internal": set(),
+        "why": "internal/version is build-time info; a stdlib-only leaf.",
+    },
+    {
+        "name": "P/cachekeys-layering",
+        "prefix": "internal/cachekeys/",
+        "allow_internal": {"internal/canonical"},
+        "why": "internal/cachekeys is a low-level Redis-key builder; it may depend only on internal/canonical, never on a higher (api/storage/aggregate) layer.",
+    },
+]
+
 # ─── Walker ──────────────────────────────────────────────────────
 
 IMPORT_RE = re.compile(r'^\s*(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)?"([^"]+)"')
@@ -234,6 +277,31 @@ def main():
                 observed.add(pair)
                 if pair not in baseline:
                     regressions.append((rule, rel, imp))
+
+        # Foundation-purity: files DIRECTLY in a pinned package dir may import
+        # only module-local packages in the rule's allow set. Scoped to the
+        # immediate directory (not the subtree) so a distinct subpackage
+        # (e.g. internal/canonical/discovery) isn't held to the parent's
+        # purity. Tests are exempt.
+        rel_dir = os.path.dirname(rel) + "/"
+        if not rel.endswith("_test.go"):
+            for prule in PURITY_RULES:
+                if rel_dir != prule["prefix"]:
+                    continue
+                own = prule["prefix"].rstrip("/")
+                for imp in imports:
+                    if not imp.startswith(MODULE):
+                        continue
+                    local = imp[len(MODULE):]
+                    if local == own or local.startswith(own + "/"):
+                        continue  # own package / subpackage
+                    if any(local == a or local.startswith(a + "/")
+                           for a in prule["allow_internal"]):
+                        continue
+                    pair = (prule["name"], rel)
+                    observed.add(pair)
+                    if pair not in baseline:
+                        regressions.append((prule, rel, imp))
 
     # Stale baseline entries — no longer violating. Force shrink.
     stale = baseline - observed
