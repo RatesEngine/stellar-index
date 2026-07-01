@@ -59,7 +59,7 @@ export function TxView({ hash: hashProp }: { hash?: string } = {}) {
           <p>
             This page needs a <code className="font-mono">?hash=</code> query
             parameter — a 64-character transaction hash. Use the search box (
-            <kbd className="rounded border border-line-strong px-1 text-[10px]">
+            <kbd className="rounded-sm border border-line-strong px-1 text-[10px]">
               ⌘K
             </kbd>
             ) to look one up.
@@ -257,12 +257,12 @@ function OperationCard({ hash, op }: { hash: string; op: TxOperation }) {
   return (
     <div className="rounded-lg border border-line p-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
+        <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
           #{op.op_index}
         </span>
         <Link
           href={`/operation?tx=${hash}&i=${op.op_index}`}
-          className="text-brand-700 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-medium hover:bg-brand-100"
+          className="text-brand-700 rounded-sm bg-brand-50 px-2 py-0.5 text-[11px] font-medium hover:bg-brand-100"
           title="Operation detail"
         >
           {op.type}
@@ -308,7 +308,7 @@ function OperationCard({ hash, op }: { hash: string; op: TxOperation }) {
         <p className="text-xs text-ink-faint">No decoded fields.</p>
       )}
       {op.raw_xdr && (
-        <details className="mt-2 rounded border border-line">
+        <details className="mt-2 rounded-sm border border-line">
           <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-ink-muted hover:text-brand-600">
             Raw XDR
           </summary>

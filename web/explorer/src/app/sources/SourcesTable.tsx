@@ -119,7 +119,7 @@ export function SourcesTable() {
           placeholder="Filter by source name, class, or subclass…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-72 rounded-md border border-line bg-surface px-2.5 py-1 text-xs placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="w-72 rounded-md border border-line bg-surface px-2.5 py-1 text-xs placeholder:text-ink-faint focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
         />
         <span className="font-mono text-[11px] text-ink-muted">
           {filteredData.length} of {stellar.length} sources
@@ -297,7 +297,7 @@ function Pill({
         : 'bg-surface-subtle text-ink-body';
   return (
     <span
-      className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}
+      className={`inline-block rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}
     >
       {children}
     </span>

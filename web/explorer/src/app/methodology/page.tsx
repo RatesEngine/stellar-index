@@ -56,15 +56,15 @@ export default function MethodologyPage() {
         />
         <Aside>
           The full per-venue registry — including{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             include_in_vwap
           </code>
           ,{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             paid
           </code>
           ,{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             backfill_safe
           </code>
           , and 24h trade counts — is at{' '}
@@ -88,7 +88,7 @@ export default function MethodologyPage() {
         </Formula>
         <p>
           where each trade i is from a source with class ={' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             exchange
           </code>
           . No per-venue weighting tier or boost — the
@@ -149,7 +149,7 @@ export default function MethodologyPage() {
           number the aggregate can no longer stand behind. For those,
           the API keeps serving the{' '}
           <strong>last known-good value</strong> but stamps it with{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             flags.frozen=true
           </code>{' '}
           so consumers know not to act on it — rather than silently
@@ -186,7 +186,7 @@ export default function MethodologyPage() {
             the status page
           </a>
           , and historically as Atom syndication via{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             /v1/incidents.atom
           </code>
           .
@@ -219,7 +219,7 @@ export default function MethodologyPage() {
         <p>
           Tip-price callers who can&apos;t tolerate that latency use
           the separate
-          <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
             /v1/price/tip
           </code>{' '}
           endpoint, which serves the rolling-window in-progress
@@ -297,13 +297,13 @@ export default function MethodologyPage() {
         </p>
         <ul className="ml-5 list-disc space-y-1">
           <li>
-            <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
               *big.Int
             </code>{' '}
             in Go.
           </li>
           <li>
-            <code className="rounded bg-surface-subtle px-1 py-0.5 text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 text-xs">
               NUMERIC
             </code>{' '}
             column in TimescaleDB.

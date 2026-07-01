@@ -1424,7 +1424,7 @@ function RegionHeader({
         <span className="text-ink-muted">
           @ {commitShort}
           {dirty && (
-            <span className="ml-1 rounded bg-warn-50 px-1 text-[10px] text-warn-700">
+            <span className="ml-1 rounded-sm bg-warn-50 px-1 text-[10px] text-warn-700">
               dirty
             </span>
           )}
@@ -1668,7 +1668,7 @@ function BackfillCoverageTable({
                         className="inline-flex items-center justify-end gap-1.5 text-warn-700"
                         title="Captured, not yet verified. The certified lake holds 100% of this source's data (substrate hash-chained to the tip), but the served tier has not reconciled to the lake yet (ADR-0033 complete=false) — so this is NOT yet fully verified. The hourly completeness verify + lake re-derive close the gap."
                       >
-                        <span className="rounded bg-line px-1 py-0.5 text-[10px] uppercase tracking-wide text-warn-700">
+                        <span className="rounded-sm bg-line px-1 py-0.5 text-[10px] uppercase tracking-wide text-warn-700">
                           reconciling
                         </span>
                         <span className="tnum">{pct.toFixed(1)}% captured</span>
@@ -1678,7 +1678,7 @@ function BackfillCoverageTable({
                         className="inline-flex items-center justify-end gap-1.5 text-ink-muted"
                         title="Completeness not yet verified (ADR-0033). The figure is a gap-free liveness signal — no large gap detected — which can read ~100% for sparse or only-partially-indexed sources. Verified completeness is pending the data-recovery backfills."
                       >
-                        <span className="rounded bg-line px-1 py-0.5 text-[10px] uppercase tracking-wide">
+                        <span className="rounded-sm bg-line px-1 py-0.5 text-[10px] uppercase tracking-wide">
                           unverified
                         </span>
                         <span className="tnum">{pct.toFixed(1)}% gap-free</span>

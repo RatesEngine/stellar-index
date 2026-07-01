@@ -109,7 +109,7 @@ function Row({ m, assetID }: { m: Market; assetID: string }) {
   return (
     <tr className="hover:bg-surface-muted">
       <Td>
-        <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
+        <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
           {isBase ? 'base' : 'quote'}
         </span>
       </Td>

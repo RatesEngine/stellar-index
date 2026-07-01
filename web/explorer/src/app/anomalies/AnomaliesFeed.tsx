@@ -77,7 +77,7 @@ export function AnomaliesFeed() {
               {data.firing_count > 0 ? `${data.firing_count} firing now` : 'Nothing firing'}
             </span>
             {data.reason_tally.map((t) => (
-              <span key={t.reason} className="inline-flex items-center gap-1 rounded bg-surface-muted px-2 py-1 text-ink-body">
+              <span key={t.reason} className="inline-flex items-center gap-1 rounded-sm bg-surface-muted px-2 py-1 text-ink-body">
                 <code className="font-mono">{t.reason}</code>
                 <span className="text-ink-muted">×{t.count}</span>
               </span>
@@ -125,11 +125,11 @@ export function AnomaliesFeed() {
                   <td className="py-1.5 pr-4 text-right font-mono tabular-nums">{e.frozen_value}</td>
                   <td className="py-1.5">
                     {e.firing ? (
-                      <span className="rounded bg-down-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-down-strong">
+                      <span className="rounded-sm bg-down-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-down-strong">
                         firing
                       </span>
                     ) : (
-                      <span className="rounded bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-up-strong">
+                      <span className="rounded-sm bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-up-strong">
                         recovered
                       </span>
                     )}

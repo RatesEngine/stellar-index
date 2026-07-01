@@ -100,7 +100,7 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
             autoFocus
             placeholder="123456"
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-center font-mono text-lg tracking-[0.4em] placeholder:tracking-[0.4em] placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-center font-mono text-lg tracking-[0.4em] placeholder:tracking-[0.4em] placeholder:text-ink-faint focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
           />
         </label>
 
@@ -153,7 +153,7 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
             required
             autoComplete="email"
             placeholder="you@example.com"
-            className="w-full rounded-md border border-line bg-surface py-2 pl-8 pr-3 text-sm placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-full rounded-md border border-line bg-surface py-2 pl-8 pr-3 text-sm placeholder:text-ink-faint focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
           />
         </div>
       </label>

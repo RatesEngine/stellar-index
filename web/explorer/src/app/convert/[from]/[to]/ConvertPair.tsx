@@ -87,10 +87,10 @@ export function ConvertPair({
               min="0"
               step="any"
               inputMode="decimal"
-              className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-none"
+              className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-hidden"
               aria-label={`Amount in ${fromLabel}`}
             />
-            <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
+            <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
               {fromLabel}
             </span>
           </div>
@@ -112,7 +112,7 @@ export function ConvertPair({
             <span className="w-full text-2xl font-mono tabular-nums text-ink">
               {result != null ? formatRate(result) : '—'}
             </span>
-            <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
+            <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
               {toLabel}
             </span>
           </div>

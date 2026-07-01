@@ -154,7 +154,7 @@ export function LendingPoolsTable() {
               return (
                 <tr key={p.pool} className="hover:bg-surface-muted">
                   <Td>
-                    <span className="inline-block rounded bg-up-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong">
+                    <span className="inline-block rounded-sm bg-up-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong">
                       {p.protocol}
                     </span>
                   </Td>

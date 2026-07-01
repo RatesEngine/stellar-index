@@ -239,7 +239,7 @@ export function LineChart({
       {chartDiv}
       <div
         ref={legendRef}
-        className="pointer-events-none absolute left-2 top-2 rounded border border-line bg-surface/90 px-2 py-1 font-mono text-[11px] text-ink-body opacity-0 shadow-card transition-opacity"
+        className="pointer-events-none absolute left-2 top-2 rounded-sm border border-line bg-surface/90 px-2 py-1 font-mono text-[11px] text-ink-body opacity-0 shadow-card transition-opacity"
       />
     </div>
   );

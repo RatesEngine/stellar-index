@@ -81,7 +81,7 @@ function RefStatusBadge({ status }: { status: RefStatus }) {
     planned: { label: 'Planned', cls: 'bg-surface-subtle text-ink-muted' },
   }[status];
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cfg.cls}`}>
+    <span className={`rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cfg.cls}`}>
       {cfg.label}
     </span>
   );

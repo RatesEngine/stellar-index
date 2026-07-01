@@ -101,11 +101,11 @@ export function DivergenceFeed() {
                   <td className="py-1.5 pr-4 font-mono text-[11px] text-ink-muted">{fmtTs(d.observed_at)}</td>
                   <td className="py-1.5">
                     {firing ? (
-                      <span className="rounded bg-down-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-down-strong">
+                      <span className="rounded-sm bg-down-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-down-strong">
                         firing
                       </span>
                     ) : (
-                      <span className="rounded bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-up-strong">
+                      <span className="rounded-sm bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase text-up-strong">
                         clear
                       </span>
                     )}

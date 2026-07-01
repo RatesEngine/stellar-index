@@ -97,14 +97,14 @@ export function CursorsTable() {
             placeholder="Filter sources or sub-sources…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-64 rounded-md border border-line bg-surface px-2.5 py-1 font-mono text-[11px] placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-64 rounded-md border border-line bg-surface px-2.5 py-1 font-mono text-[11px] placeholder:text-ink-faint focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
           />
           <label className="inline-flex select-none items-center gap-1.5 font-mono text-[11px] text-ink-body">
             <input
               type="checkbox"
               checked={hideStale}
               onChange={(e) => setHideStale(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-line-strong text-brand-600 focus:ring-brand-500"
+              className="h-3.5 w-3.5 rounded-sm border-line-strong text-brand-600 focus:ring-brand-500"
             />
             Hide stale (&gt;1h)
           </label>
@@ -184,7 +184,7 @@ function LagPill({ seconds }: { seconds: number }) {
         : 'bg-down-soft text-down-strong';
   return (
     <span
-      className={`inline-block rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${tone}`}
+      className={`inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${tone}`}
     >
       {formatLag(seconds)}
     </span>

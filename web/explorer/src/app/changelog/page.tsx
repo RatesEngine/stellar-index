@@ -39,7 +39,7 @@ export default function ChangelogPage() {
         </h1>
         <p className="max-w-2xl text-base text-ink-body">
           Pulled at build time from{' '}
-          <code className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-sm">
+          <code className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-sm">
             CHANGELOG.md
           </code>{' '}
           on{' '}
@@ -141,7 +141,7 @@ function ReleaseCard({ release }: { release: Release }) {
         </h2>
         <div className="flex items-center gap-2 text-xs">
           {isUnreleased ? (
-            <span className="rounded bg-warn-50 px-2 py-0.5 font-mono uppercase tracking-wider text-warn-700">
+            <span className="rounded-sm bg-warn-50 px-2 py-0.5 font-mono uppercase tracking-wider text-warn-700">
               unreleased
             </span>
           ) : (
@@ -156,7 +156,7 @@ function ReleaseCard({ release }: { release: Release }) {
               href={`https://github.com/StellarIndex/stellar-index/releases/tag/${release.version}`}
               target="_blank"
               rel="noreferrer noopener"
-              className="rounded border border-line px-2 py-0.5 font-mono text-xs hover:border-brand-500 hover:text-brand-600"
+              className="rounded-sm border border-line px-2 py-0.5 font-mono text-xs hover:border-brand-500 hover:text-brand-600"
             >
               GitHub ↗
             </a>
@@ -282,7 +282,7 @@ function MarkdownLite({ text }: { text: string }) {
           return (
             <code
               key={i}
-              className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-xs"
+              className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-xs"
             >
               {t.value}
             </code>

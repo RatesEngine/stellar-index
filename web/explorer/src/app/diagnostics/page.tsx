@@ -31,7 +31,7 @@ export default function DiagnosticsPage() {
           <>
             Public system-health view. Today: live per-source ingest cursors
             straight from{' '}
-            <code className="rounded bg-surface-subtle px-1 font-mono text-[13px]">
+            <code className="rounded-sm bg-surface-subtle px-1 font-mono text-[13px]">
               /v1/diagnostics/cursors
             </code>
             . Decoder coverage, archive completeness, cross-region consistency,

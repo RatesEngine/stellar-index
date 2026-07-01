@@ -55,7 +55,7 @@ export function CopyButton({ value, className }: { value: string; className?: st
         }
       }}
       className={cn(
-        'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-faint transition-colors hover:bg-surface-subtle hover:text-ink-body',
+        'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-ink-faint transition-colors hover:bg-surface-subtle hover:text-ink-body',
         className,
       )}
     >

@@ -105,7 +105,7 @@ export function DegradedBanner() {
       className={`border-y px-4 py-2 text-sm ${tone.bg} ${tone.border} ${tone.fg}`}
     >
       <div className="mx-auto flex max-w-7xl items-center gap-3">
-        <Icon className="h-4 w-4 flex-shrink-0" />
+        <Icon className="h-4 w-4 shrink-0" />
         <span className="font-medium">{tone.label}.</span>
         <span className="hidden text-xs opacity-90 sm:inline">
           {activeCount} active alert{activeCount === 1 ? '' : 's'}
@@ -113,7 +113,7 @@ export function DegradedBanner() {
             <>
               {' '}
               · top:{' '}
-              <code className="rounded bg-surface/40 px-1 py-0.5 text-[11px]">
+              <code className="rounded-sm bg-surface/40 px-1 py-0.5 text-[11px]">
                 {topAlert}
               </code>
             </>

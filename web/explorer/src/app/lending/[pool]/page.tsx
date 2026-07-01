@@ -189,16 +189,16 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
 
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-up-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong">
+          <span className="rounded-sm bg-up-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong">
             Blend
           </span>
           {label && (
-            <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-brand-800">
+            <span className="rounded-sm bg-brand-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-brand-800">
               {label.name}
             </span>
           )}
           {label?.deployedAt && (
-            <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[11px] font-mono text-ink-body">
+            <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[11px] font-mono text-ink-body">
               deployed {label.deployedAt}
             </span>
           )}

@@ -416,7 +416,7 @@ export function SearchModal() {
       >
         <Search className="h-4 w-4 shrink-0" />
         <span>Search</span>
-        <kbd className="ml-auto rounded border border-line bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-faint">
+        <kbd className="ml-auto rounded-sm border border-line bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-faint">
           ⌘K
         </kbd>
       </button>
@@ -439,7 +439,7 @@ export function SearchModal() {
               <input
                 autoFocus
                 aria-label="Search coins, pairs, protocols, accounts, and transactions"
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-ink-faint"
+                className="flex-1 bg-transparent text-sm outline-hidden placeholder:text-ink-faint"
                 placeholder="Coins, pairs, protocols, accounts, transactions…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -467,7 +467,7 @@ export function SearchModal() {
                     className="flex items-center justify-between rounded-md px-3 py-2 hover:bg-surface-muted"
                   >
                     <span className="flex items-center gap-2">
-                      <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted">
+                      <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted">
                         {r.type}
                       </span>
                       <span className="font-medium">{r.label}</span>

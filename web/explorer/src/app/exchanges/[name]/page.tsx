@@ -109,7 +109,7 @@ export default async function ExchangeDetailPage({
       <header className="space-y-2 border-b border-line pb-4">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-3xl font-semibold tracking-tight">{info.name}</h1>
-          <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
+          <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
             {info.type}
           </span>
         </div>

@@ -223,12 +223,12 @@ function NewKeyReveal({
         </div>
         <p className="text-xs text-ink-muted">
           Stored as{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono">
             {created.key.key_prefix}…
           </code>
           {' · '}
           Send it as the{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono">
             X-API-Key
           </code>{' '}
           header on every request.
@@ -352,7 +352,7 @@ function CreateKeyForm({
               max={ceiling ?? 100000}
               value={rateLimit}
               onChange={(e) => setRateLimit(Number(e.target.value) || 1)}
-              className="tnum max-w-[12rem]"
+              className="tnum max-w-48"
             />
           </Field>
 

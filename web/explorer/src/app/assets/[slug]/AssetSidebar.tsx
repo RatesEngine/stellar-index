@@ -234,9 +234,9 @@ function PerformanceRange({
         <span>Low</span>
         <span>High</span>
       </div>
-      <div className="relative mt-1 h-1.5 rounded-full bg-gradient-to-r from-down via-warn-500 to-up">
+      <div className="relative mt-1 h-1.5 rounded-full bg-linear-to-r from-down via-warn-500 to-up">
         <div
-          className="absolute top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-ink shadow"
+          className="absolute top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-ink shadow-sm"
           style={{ left: `calc(${pct}% - 2px)` }}
           aria-hidden
         />

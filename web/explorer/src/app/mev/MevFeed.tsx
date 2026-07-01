@@ -78,7 +78,7 @@ export function MevFeed() {
             return (
               <li key={e.event_id} className="py-3 text-sm">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="inline-block rounded bg-down-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-down-strong">
+                  <span className="inline-block rounded-sm bg-down-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-down-strong">
                     {e.kind}
                   </span>
                   <span className="inline-flex flex-wrap items-center gap-1 font-mono text-xs text-ink-body">

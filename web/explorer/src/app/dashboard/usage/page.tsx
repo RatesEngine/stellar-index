@@ -245,7 +245,7 @@ function UsageBars({ rows }: { rows: UsageRow[] }) {
             className="flex flex-1 flex-col items-center justify-end"
           >
             <div
-              className="w-full rounded-sm bg-brand-500/70"
+              className="w-full rounded-xs bg-brand-500/70"
               style={{ height: `${h}px` }}
             />
           </div>

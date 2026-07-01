@@ -97,7 +97,7 @@ export function DexProtocolsTable() {
                   <Td>
                     <Link
                       href={`/dexes/${r.name}`}
-                      className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider hover:underline ${tone}`}
+                      className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider hover:underline ${tone}`}
                     >
                       {r.name}
                     </Link>

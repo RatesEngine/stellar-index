@@ -188,7 +188,7 @@ export function HomeTryAPI() {
             aria-label="Run live"
             onClick={runLive}
             disabled={running}
-            className="rounded p-1 text-ink-faint hover:bg-ink hover:text-up disabled:opacity-50"
+            className="rounded-sm p-1 text-ink-faint hover:bg-ink hover:text-up disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5" />
           </button>
@@ -204,7 +204,7 @@ export function HomeTryAPI() {
                 })
                 .catch(() => {});
             }}
-            className="rounded p-1 text-ink-faint hover:bg-ink hover:text-ink-faint"
+            className="rounded-sm p-1 text-ink-faint hover:bg-ink hover:text-ink-faint"
           >
             {copied ? (
               <Check className="h-3.5 w-3.5 text-up" />

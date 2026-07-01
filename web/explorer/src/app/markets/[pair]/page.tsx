@@ -374,7 +374,7 @@ export default async function PairPage({ params }: { params: Params }) {
             <AssetBadge canonical={quote} />
           </h1>
           {price?.price_type && (
-            <span className="rounded bg-surface-subtle px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
+            <span className="rounded-sm bg-surface-subtle px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
               {price.price_type}
             </span>
           )}
@@ -571,7 +571,7 @@ function SourceBreakdownPanel({ rows }: { rows: PoolRow[] }) {
                 {r.source}
               </Link>
               <div className="flex-1">
-                <div className="h-2 overflow-hidden rounded bg-surface-subtle">
+                <div className="h-2 overflow-hidden rounded-sm bg-surface-subtle">
                   <div
                     className="h-full bg-brand-500"
                     style={{ width: `${pct ?? 0}%` }}
@@ -714,7 +714,7 @@ function ChangeBadge({ pct, window }: { pct: number; window: string }) {
   const sign = pct > 0 ? '+' : '';
   return (
     <span
-      className={`rounded px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
+      className={`rounded-sm px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
     >
       {sign}
       {pct.toFixed(2)}%

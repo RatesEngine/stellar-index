@@ -209,7 +209,7 @@ function DecodedFields({ op }: { op: TxOperation }) {
         </dl>
       )}
       {op.raw_xdr && (
-        <details className="mt-2 rounded border border-line">
+        <details className="mt-2 rounded-sm border border-line">
           <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-ink-muted hover:text-brand-600">
             Raw XDR
           </summary>

@@ -120,7 +120,7 @@ export function HistoryTabPanel({ assetID }: { assetID: string }) {
               <td className="py-2 pr-3">
                 <Link
                   href={`/sources/${r.source}`}
-                  className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-[11px] text-ink-body hover:text-brand-600"
+                  className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-[11px] text-ink-body hover:text-brand-600"
                 >
                   {r.source}
                 </Link>

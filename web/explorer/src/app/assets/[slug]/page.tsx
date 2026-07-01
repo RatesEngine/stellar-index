@@ -897,12 +897,12 @@ function OverviewBody({
               );
             })()}
             {price?.flags?.stale && (
-              <span className="rounded bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
+              <span className="rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
                 Stale
               </span>
             )}
             {price?.flags?.triangulated && (
-              <span className="rounded bg-brand-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-brand-800">
+              <span className="rounded-sm bg-brand-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-brand-800">
                 Triangulated via XLM
               </span>
             )}
@@ -1047,7 +1047,7 @@ function OverviewBody({
                       className="hover:bg-surface-muted"
                     >
                       <td className="px-4 py-3">
-                        <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
+                        <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-body">
                           {m.side}
                         </span>
                       </td>
@@ -1293,7 +1293,7 @@ function peggedTo(code: string): string | null {
 
 function PeggedBadge({ currency }: { currency: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-brand-700">
+    <span className="inline-flex items-center gap-1 rounded-sm bg-brand-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-brand-700">
       <span className="text-[10px] opacity-70">PEG</span>
       {currency}
     </span>
@@ -1319,7 +1319,7 @@ function ChangePctLabel({
   const sign = n > 0 ? '+' : '';
   return (
     <span
-      className={`rounded px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
+      className={`rounded-sm px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
     >
       {sign}
       {n.toFixed(2)}%

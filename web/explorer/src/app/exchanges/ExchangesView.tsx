@@ -155,7 +155,7 @@ export function ExchangesView() {
                     <Td>
                       <Link
                         href={`/exchanges/${r.name}`}
-                        className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider hover:underline ${tone}`}
+                        className={`inline-block rounded-sm px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider hover:underline ${tone}`}
                       >
                         {label}
                       </Link>
@@ -302,7 +302,7 @@ function AllCEXMarkets() {
                   <Td>
                     <Link
                       href={`/exchanges/${m.source}`}
-                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider hover:underline ${tone}`}
+                      className={`inline-block rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider hover:underline ${tone}`}
                     >
                       {LABEL[m.source ?? ''] ?? m.source}
                     </Link>

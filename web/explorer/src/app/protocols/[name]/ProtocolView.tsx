@@ -289,7 +289,7 @@ function Shell({
 function CategoryChip({ category }: { category: string }) {
   return (
     <span
-      className={`rounded px-2 py-0.5 font-mono text-xs uppercase tracking-wider ${categoryTone(category)}`}
+      className={`rounded-sm px-2 py-0.5 font-mono text-xs uppercase tracking-wider ${categoryTone(category)}`}
     >
       {category}
     </span>
@@ -304,7 +304,7 @@ function CompletenessBadge({
   if (!completeness) {
     return (
       <span
-        className="rounded bg-surface-subtle px-2 py-0.5 text-[11px] uppercase tracking-wider text-ink-muted"
+        className="rounded-sm bg-surface-subtle px-2 py-0.5 text-[11px] uppercase tracking-wider text-ink-muted"
         title="No completeness verdict recorded for this source yet."
       >
         Coverage unknown
@@ -314,7 +314,7 @@ function CompletenessBadge({
   if (completeness.complete) {
     return (
       <span
-        className="rounded bg-up-subtle px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong"
+        className="rounded-sm bg-up-subtle px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong"
         title={`Verified complete to ledger #${completeness.watermark_ledger.toLocaleString()} (ADR-0033 substrate + recognition + projection reconcile).`}
       >
         ✓ Verified complete
@@ -323,7 +323,7 @@ function CompletenessBadge({
   }
   return (
     <span
-      className="rounded bg-warn-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-warn-700"
+      className="rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-warn-700"
       title={`Partial coverage to ledger #${completeness.watermark_ledger.toLocaleString()}.`}
     >
       Partial coverage
@@ -497,7 +497,7 @@ function EventBreakdown({
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="rounded text-xs font-medium text-brand-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+          className="rounded-sm text-xs font-medium text-brand-600 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/60"
         >
           {expanded ? 'Show fewer' : `+${overflow} more event ${overflow === 1 ? 'type' : 'types'}`}
         </button>
@@ -575,7 +575,7 @@ function ContractRoster({
         <button
           type="button"
           onClick={() => setSortKey(keyName)}
-          className={`ml-auto flex items-center gap-1 rounded uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${active ? 'text-brand-600' : 'hover:text-ink-body'}`}
+          className={`ml-auto flex items-center gap-1 rounded-sm uppercase tracking-wider focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/60 ${active ? 'text-brand-600' : 'hover:text-ink-body'}`}
         >
           {label}
           <span aria-hidden className="text-[8px]">
@@ -672,7 +672,7 @@ function ContractRoster({
             type="button"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            className="rounded text-xs font-medium text-brand-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
+            className="rounded-sm text-xs font-medium text-brand-600 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/60"
           >
             {expanded
               ? 'Show fewer'
@@ -691,13 +691,13 @@ const ROSTER_TOP_N = 25;
 function RoleChip({ kind }: { kind?: string }) {
   if (kind === 'factory') {
     return (
-      <span className="rounded bg-warn-50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-warn-700">
+      <span className="rounded-sm bg-warn-50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-warn-700">
         factory
       </span>
     );
   }
   return (
-    <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-ink-body">
+    <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-ink-body">
       instance
     </span>
   );
@@ -718,7 +718,7 @@ function Footer({ data, name }: { data: ProtocolDetail; name: string }) {
               <li key={f}>
                 <Link
                   href={`/contracts/${encodeURIComponent(f)}/`}
-                  className="inline-flex items-center rounded border border-line px-2 py-1 font-mono text-[11px] text-brand-600 hover:border-brand-500 hover:underline"
+                  className="inline-flex items-center rounded-sm border border-line px-2 py-1 font-mono text-[11px] text-brand-600 hover:border-brand-500 hover:underline"
                 >
                   {shortId(f)}
                 </Link>

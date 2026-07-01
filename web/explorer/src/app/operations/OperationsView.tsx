@@ -87,7 +87,7 @@ export function OperationsView() {
             {stats.map((s) => (
               <span
                 key={s.type}
-                className="inline-flex items-center gap-1.5 rounded bg-surface-muted px-2 py-1 text-ink-body"
+                className="inline-flex items-center gap-1.5 rounded-sm bg-surface-muted px-2 py-1 text-ink-body"
               >
                 <code className="font-mono">{s.type}</code>
                 <span className="text-ink-muted">{formatCompact(s.count)}</span>
@@ -133,7 +133,7 @@ export function OperationsView() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/operation?tx=${op.tx_hash}&i=${op.op_index}`}
-                        className="rounded bg-surface-muted px-1.5 py-0.5 text-[11px] text-ink-body hover:text-brand-600"
+                        className="rounded-sm bg-surface-muted px-1.5 py-0.5 text-[11px] text-ink-body hover:text-brand-600"
                         title="Operation detail"
                       >
                         <code>{op.type}</code>

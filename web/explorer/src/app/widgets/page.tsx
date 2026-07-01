@@ -69,7 +69,7 @@ export default function WidgetsPage() {
           <p className="mt-1 text-sm text-ink-body">
             Live price, 24h change, and a sparkline for one asset.
             Source path is{' '}
-            <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-xs">
               /embed/asset/&lt;slug&gt;
             </code>
             .
@@ -101,7 +101,7 @@ export default function WidgetsPage() {
           </h2>
           <p className="mt-1 text-sm text-ink-body">
             Live VWAP for a (base, quote) pair. Source path is{' '}
-            <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-xs">
               /embed/pair/&lt;base&gt;~&lt;quote&gt;
             </code>{' '}
             (URL-encode the tilde when embedding from servers that
@@ -133,7 +133,7 @@ export default function WidgetsPage() {
           <p className="mt-1 text-sm text-ink-body">
             Live USD-base rate + 7d change for one fiat currency.
             Source path is{' '}
-            <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-xs">
               /embed/currency/&lt;ticker&gt;
             </code>
             .
@@ -173,7 +173,7 @@ export default function WidgetsPage() {
           <li>
             <strong>Light + dark.</strong> The widgets follow the
             embedding page&apos;s color scheme via{' '}
-            <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-xs">
               prefers-color-scheme
             </code>
             . Tested against light, dark, and system-default
@@ -187,7 +187,7 @@ export default function WidgetsPage() {
           <li>
             <strong>Apex domain only.</strong> Embed against the apex
             (
-            <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-xs">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-xs">
               stellarindex.io
             </code>
             ), not a preview deployment. Cloudflare-Pages preview URLs
@@ -221,7 +221,7 @@ function WidgetCard({
           frameBorder="0"
           loading="lazy"
           title={label}
-          className="rounded border border-line"
+          className="rounded-sm border border-line"
         />
       </div>
       <div className="border-t border-line">

@@ -73,7 +73,7 @@ export function CurrencyCombobox({
   const triggerCls =
     mode === 'select'
       ? 'rounded-md border border-line bg-surface px-2 py-1 font-mono text-xs uppercase tracking-wider text-ink-body hover:border-brand-500'
-      : 'rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body hover:bg-line';
+      : 'rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body hover:bg-line';
 
   return (
     <div ref={wrapRef} className="relative">
@@ -103,7 +103,7 @@ export function CurrencyCombobox({
               }
             }}
             placeholder={placeholder}
-            className="w-full border-b border-line bg-surface px-3 py-2 text-sm focus:outline-none"
+            className="w-full border-b border-line bg-surface px-3 py-2 text-sm focus:outline-hidden"
           />
           <ul className="max-h-64 overflow-y-auto py-1 text-sm">
             {filtered.length === 0 && (

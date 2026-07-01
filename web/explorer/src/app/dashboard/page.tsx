@@ -210,7 +210,7 @@ function GettingStarted({
       ) : (
         <>
           Keys authenticate your requests to{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[12px]">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[12px]">
             api.stellarindex.io
           </code>
           .{' '}
@@ -231,11 +231,11 @@ function GettingStarted({
       ) : (
         <>
           Try the pricing API:{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[12px]">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[12px]">
             GET /v1/price/XLM-USD
           </code>{' '}
           with your{' '}
-          <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[12px]">
+          <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[12px]">
             X-API-Key
           </code>{' '}
           header.

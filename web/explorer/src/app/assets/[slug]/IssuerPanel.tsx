@@ -175,7 +175,7 @@ function IssuedAssetsTable({ issuer }: { issuer: Issuer }) {
 function FlagPill({ on, label }: { on?: boolean; label: string }) {
   if (on === undefined) {
     return (
-      <span className="inline-block rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted">
+      <span className="inline-block rounded-sm bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ink-muted">
         {label}: unknown
       </span>
     );
@@ -185,7 +185,7 @@ function FlagPill({ on, label }: { on?: boolean; label: string }) {
     : 'bg-up-soft text-up-strong';
   return (
     <span
-      className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}
+      className={`inline-block rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}
     >
       {label}: {on ? 'on' : 'off'}
     </span>

@@ -65,7 +65,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
-            className="absolute inset-0 bg-ink/30 backdrop-blur-sm"
+            className="absolute inset-0 bg-ink/30 backdrop-blur-xs"
             onClick={() => setDrawer(false)}
             aria-hidden
           />
@@ -76,7 +76,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Navigation"
-            className="absolute left-0 top-0 h-full w-72 max-w-[85vw] border-r border-line bg-surface shadow-elevated outline-none"
+            className="absolute left-0 top-0 h-full w-72 max-w-[85vw] border-r border-line bg-surface shadow-elevated outline-hidden"
           >
             <button
               type="button"

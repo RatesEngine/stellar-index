@@ -137,7 +137,7 @@ function PairPicker({
           const [base, quote] = e.target.value.split('|');
           onChange({ base, quote });
         }}
-        className="bg-transparent text-xs font-mono uppercase tracking-wider text-ink-body focus:outline-none"
+        className="bg-transparent text-xs font-mono uppercase tracking-wider text-ink-body focus:outline-hidden"
       >
         {pairs.map((p) => (
           <option key={`${p.base}|${p.quote}`} value={`${p.base}|${p.quote}`}>

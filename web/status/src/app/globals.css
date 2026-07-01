@@ -1,6 +1,141 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #d9e6ff;
+  --color-brand-200: #bcd3ff;
+  --color-brand-300: #8eb6ff;
+  --color-brand-400: #598dff;
+  --color-brand-500: #3366f6;
+  --color-brand-600: #1f4ae0;
+  --color-brand-700: #1a3bc2;
+  --color-brand-800: #1b349c;
+  --color-brand-900: #1c317b;
+  --color-brand-950: #151f4b;
+
+  --color-surface: #ffffff;
+  --color-surface-canvas: #fbfcfe;
+  --color-surface-muted: #f6f8fb;
+  --color-surface-subtle: #eef2f7;
+
+  --color-line-subtle: #eef1f5;
+  --color-line: #e3e8ef;
+  --color-line-strong: #cdd5e0;
+
+  --color-ink: #0b1220;
+  --color-ink-strong: #0b1220;
+  --color-ink-body: #37415b;
+  --color-ink-muted: #555f6e;
+  --color-ink-faint: #636d7e;
+
+  --color-up-subtle: #dcfce7;
+  --color-up: #16a34a;
+  --color-up-strong: #15803d;
+
+  --color-down-subtle: #fee2e2;
+  --color-down: #dc2626;
+  --color-down-strong: #b91c1c;
+
+  --color-bad-50: #fef2f2;
+  --color-bad-300: #fca5a5;
+  --color-bad-500: #ef4444;
+  --color-bad-700: #b91c1c;
+  --color-bad-900: #7f1d1d;
+
+  --color-warn-50: #fffbeb;
+  --color-warn-300: #fcd34d;
+  --color-warn-500: #f59e0b;
+  --color-warn-700: #b45309;
+  --color-warn-900: #78350f;
+
+  --color-ok-50: #f0fdf4;
+  --color-ok-300: #86efac;
+  --color-ok-500: #22c55e;
+  --color-ok-700: #15803d;
+
+  --color-timepin: #fef3c7;
+  --color-timepin-ring: #f59e0b;
+
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --text-display: 3.5rem;
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.035em;
+  --text-display-sm: 2.5rem;
+  --text-display-sm--line-height: 1.1;
+  --text-display-sm--letter-spacing: -0.03em;
+  --text-h1: 2rem;
+  --text-h1--line-height: 1.15;
+  --text-h1--letter-spacing: -0.025em;
+  --text-h2: 1.5rem;
+  --text-h2--line-height: 1.2;
+  --text-h2--letter-spacing: -0.02em;
+  --text-h3: 1.25rem;
+  --text-h3--line-height: 1.3;
+  --text-h3--letter-spacing: -0.015em;
+
+  --tracking-tightest: -0.04em;
+
+  --radius-card: 0.875rem;
+  --radius-4xl: 2rem;
+
+  --shadow-xs: 0 1px 2px 0 rgb(11 18 32 / 0.04);
+  --shadow-card: 0 1px 2px rgb(11 18 32 / 0.04), 0 1px 3px rgb(11 18 32 / 0.05);
+  --shadow-elevated:
+    0 8px 24px -6px rgb(11 18 32 / 0.1), 0 2px 6px -2px rgb(11 18 32 / 0.05);
+  --shadow-focus: 0 0 0 3px rgb(31 74 224 / 0.2);
+
+  --container-page: 80rem;
+  --container-prose: 46rem;
+
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility tnum {
+  /* Tabular (monospaced) figures for aligned numeric columns. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Stellar Index — base layer (light mode only, v2 redesign 2026-06-17).
@@ -40,22 +175,14 @@
 
   /* Consistent, accessible focus ring across interactive elements. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-600/60 ring-offset-2 ring-offset-surface-canvas;
+    @apply outline-hidden ring-2 ring-brand-600/60 ring-offset-2 ring-offset-surface-canvas;
   }
 
   /* Hairline default border colour so `border` alone reads as a hairline. */
   *,
   ::before,
   ::after {
-    border-color: theme('colors.line.DEFAULT');
-  }
-}
-
-@layer utilities {
-  /* Tabular (monospaced) figures for aligned numeric columns. */
-  .tnum {
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum';
+    border-color: var(--color-line);
   }
 }
 

@@ -210,7 +210,7 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
       {detail.scam_reason && (
         <div className="rounded-lg border-2 border-down/40 bg-down-subtle px-4 py-3">
           <div className="flex items-baseline gap-2">
-            <span className="rounded bg-down px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+            <span className="rounded-sm bg-down px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
               Warning
             </span>
             <span className="text-sm font-medium text-down-strong">
@@ -245,14 +245,14 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
               {detail.org_verified ? (
                 <span
                   title="SEP-1 verified — the organisation's stellar.toml lists this issuer back (bidirectional)"
-                  className="rounded bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-up-strong"
+                  className="rounded-sm bg-up-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-up-strong"
                 >
                   ✓ Verified
                 </span>
               ) : (
                 <span
                   title="Unverified — this organisation name is self-declared in the issuer's SEP-1 toml and is NOT cross-confirmed by the organisation. Do not treat it as a verified identity."
-                  className="rounded bg-surface-sunk px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted"
+                  className="rounded-sm bg-surface-sunk px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted"
                 >
                   Unverified
                 </span>

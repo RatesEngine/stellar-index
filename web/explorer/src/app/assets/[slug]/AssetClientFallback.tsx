@@ -152,7 +152,7 @@ export function AssetClientFallback({ slug }: { slug: string }) {
     >
       <p>
         The slug{' '}
-        <code className="rounded bg-surface-subtle px-1 font-mono text-xs">
+        <code className="rounded-sm bg-surface-subtle px-1 font-mono text-xs">
           {slug}
         </code>{' '}
         doesn&apos;t match any asset the indexer has observed yet. Asset slugs

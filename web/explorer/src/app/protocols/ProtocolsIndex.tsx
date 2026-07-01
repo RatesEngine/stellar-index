@@ -176,7 +176,7 @@ function ProtocolCardView({ card }: { card: ProtocolCard }) {
   return (
     <Link
       href={`/protocols/${encodeURIComponent(card.name)}`}
-      className="group flex flex-col rounded-card border border-line bg-surface p-5 shadow-card transition-shadow duration-150 hover:border-line-strong hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-canvas"
+      className="group flex flex-col rounded-card border border-line bg-surface p-5 shadow-card transition-shadow duration-150 hover:border-line-strong hover:shadow-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-600/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-canvas"
     >
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-h3 font-semibold text-ink group-hover:text-brand-600">
@@ -184,7 +184,7 @@ function ProtocolCardView({ card }: { card: ProtocolCard }) {
         </h2>
         {card.category && (
           <span
-            className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${categoryTone(card.category)}`}
+            className={`shrink-0 rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${categoryTone(card.category)}`}
           >
             {card.category}
           </span>
@@ -250,7 +250,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+      className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 ${
         active
           ? 'bg-brand-600 text-white'
           : 'bg-surface-subtle text-ink-body hover:bg-line'

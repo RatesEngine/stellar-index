@@ -154,7 +154,7 @@ export function DonutChart({
             <span className="flex items-center gap-2">
               <span
                 aria-hidden
-                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                className="h-2.5 w-2.5 shrink-0 rounded-xs"
                 style={{ backgroundColor: s.color }}
               />
               <span className="min-w-0 flex-1 truncate text-ink-body">{s.label}</span>
@@ -167,7 +167,7 @@ export function DonutChart({
           return (
             <li key={s.label}>
               {s.href ? (
-                <Link href={s.href} className="block rounded px-1 -mx-1 transition-colors hover:bg-surface-muted hover:text-brand-600">
+                <Link href={s.href} className="block rounded-sm px-1 -mx-1 transition-colors hover:bg-surface-muted hover:text-brand-600">
                   {row}
                 </Link>
               ) : (

@@ -27,7 +27,7 @@ export function CopyableSnippet({ snippet }: { snippet: string }) {
             })
             .catch(() => {});
         }}
-        className="absolute right-2 top-2 rounded p-1 text-ink-faint hover:bg-ink hover:text-ink-faint"
+        className="absolute right-2 top-2 rounded-sm p-1 text-ink-faint hover:bg-ink hover:text-ink-faint"
       >
         {copied ? (
           <Check className="h-3.5 w-3.5 text-up" />

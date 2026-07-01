@@ -157,7 +157,7 @@ export default function SDKPage() {
         <h2 className="text-xl font-semibold tracking-tight">Install</h2>
         <p className="text-sm text-ink-body">
           Single dependency. The module path follows the canonical{' '}
-          <code className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-xs">
+          <code className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs">
             github.com/StellarIndex/stellar-index
           </code>{' '}
           repo path.
@@ -215,11 +215,11 @@ export default function SDKPage() {
             def={
               <>
                 Set{' '}
-                <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">
+                <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">
                   Options.APIKey
                 </code>
                 . Sent as{' '}
-                <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">
+                <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">
                   Authorization: Bearer
                 </code>{' '}
                 on every request. Sign in at{' '}
@@ -281,7 +281,7 @@ export default function SDKPage() {
             Other languages? The REST API is plain JSON — generate a
             client for your favourite language from the OpenAPI spec
             at{' '}
-            <code className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">
+            <code className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[11px]">
               openapi/stellar-index.v1.yaml
             </code>
             . First-party clients beyond Go land as the demand

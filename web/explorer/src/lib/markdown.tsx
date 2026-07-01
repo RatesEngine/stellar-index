@@ -390,7 +390,7 @@ function Inline({ text }: { text: string }) {
           return (
             <code
               key={i}
-              className="rounded bg-surface-subtle px-1 py-0.5 font-mono text-[0.85em]"
+              className="rounded-sm bg-surface-subtle px-1 py-0.5 font-mono text-[0.85em]"
             >
               {t.value}
             </code>

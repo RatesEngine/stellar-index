@@ -74,7 +74,7 @@ export function RequestReveal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="request-reveal-title"
-            className="w-full max-w-2xl rounded-lg bg-surface p-6 shadow-2xl outline-none"
+            className="w-full max-w-2xl rounded-lg bg-surface p-6 shadow-2xl outline-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="mb-4 flex items-center justify-between">
@@ -117,7 +117,7 @@ export function RequestReveal({
                     href={example.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded border border-line px-2 py-1 text-xs text-ink-body hover:border-brand-500 hover:text-brand-600"
+                    className="inline-flex items-center gap-1 rounded-sm border border-line px-2 py-1 text-xs text-ink-body hover:border-brand-500 hover:text-brand-600"
                   >
                     <ExternalLink className="h-3 w-3" />
                     Open
@@ -169,7 +169,7 @@ function CopyButton({
         await navigator.clipboard.writeText(text);
         onCopy();
       }}
-      className="mt-2 inline-flex items-center gap-1 rounded border border-line px-2 py-1 text-xs text-ink-body hover:border-brand-500 hover:text-brand-600"
+      className="mt-2 inline-flex items-center gap-1 rounded-sm border border-line px-2 py-1 text-xs text-ink-body hover:border-brand-500 hover:text-brand-600"
     >
       {copied ? (
         <>

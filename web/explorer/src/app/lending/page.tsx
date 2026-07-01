@@ -30,7 +30,7 @@ export default function LendingPage() {
       <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Blend</h2>
-          <span className="rounded bg-up-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-up-strong">
+          <span className="rounded-sm bg-up-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-up-strong">
             Live
           </span>
         </div>

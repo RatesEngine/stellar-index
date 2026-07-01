@@ -142,7 +142,7 @@ export function AssetConverter({
               min="0"
               step="any"
               inputMode="decimal"
-              className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-none"
+              className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-hidden"
             />
             {direction === 'fiat-to-asset' ? (
               <CurrencyCombobox
@@ -154,7 +154,7 @@ export function AssetConverter({
                 tickers={allTickers}
               />
             ) : (
-              <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
+              <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
                 {fromUnit}
               </span>
             )}
@@ -188,7 +188,7 @@ export function AssetConverter({
                 tickers={allTickers}
               />
             ) : (
-              <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
+              <span className="rounded-sm bg-surface-subtle px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
                 {toUnit}
               </span>
             )}

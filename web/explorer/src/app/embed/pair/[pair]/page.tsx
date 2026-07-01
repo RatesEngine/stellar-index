@@ -192,7 +192,7 @@ function ChangeChip({ pct, label }: { pct: number | null | undefined; label: str
         ? 'bg-down-subtle text-down'
         : 'bg-surface-subtle text-ink-body';
   return (
-    <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${cls}`}>
+    <span className={`rounded-sm px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${cls}`}>
       {pct > 0 ? '+' : ''}
       {pct.toFixed(2)}% {label}
     </span>

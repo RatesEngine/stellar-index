@@ -81,7 +81,7 @@ export function IssuersTable() {
             placeholder="Filter by name, domain, or G-strkey…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-72 rounded-md border border-line bg-surface px-2.5 py-1 text-xs placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-72 rounded-md border border-line bg-surface px-2.5 py-1 text-xs placeholder:text-ink-faint focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
           />
           <span className="font-mono text-[11px] text-ink-muted">
             {filtered.length} of {data.length} rows
@@ -140,7 +140,7 @@ export function IssuersTable() {
                     {row.org_verified && row.org_name && (
                       <span
                         title="SEP-1 verified — the organisation's stellar.toml lists this issuer back (bidirectional)"
-                        className="rounded bg-up-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-up-strong"
+                        className="rounded-sm bg-up-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-up-strong"
                       >
                         ✓ Verified
                       </span>
@@ -148,7 +148,7 @@ export function IssuersTable() {
                     {row.scam_reason && (
                       <span
                         title={row.scam_reason}
-                        className="rounded bg-down-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-down"
+                        className="rounded-sm bg-down-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-down"
                       >
                         SCAM
                       </span>

@@ -67,7 +67,7 @@ export function ContractView({ id: idProp }: { id?: string } = {}) {
             This page needs an <code className="font-mono">?id=</code> query
             parameter — a 56-character Soroban contract ID (starts with{' '}
             <code className="font-mono">C</code>). Use the search box (
-            <kbd className="rounded border border-line-strong px-1 text-[10px]">
+            <kbd className="rounded-sm border border-line-strong px-1 text-[10px]">
               ⌘K
             </kbd>
             ) to look one up.
@@ -539,7 +539,7 @@ function InteractionsPanel({ id }: { id: string }) {
                   {e.protocol ? (
                     <Link
                       href={`/protocols/${encodeURIComponent(e.protocol)}`}
-                      className="inline-flex items-center rounded bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brand-800 hover:bg-brand-200"
+                      className="inline-flex items-center rounded-sm bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brand-800 hover:bg-brand-200"
                     >
                       {e.protocol}
                     </Link>

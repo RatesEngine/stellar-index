@@ -221,12 +221,12 @@ export default async function SourceDetailPage({
           <h1 className="text-3xl font-semibold tracking-tight">{name}</h1>
           <ClassBadge cls={source.class} />
           {source.subclass && (
-            <span className="rounded bg-surface-subtle px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
+            <span className="rounded-sm bg-surface-subtle px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-ink-body">
               {source.subclass}
             </span>
           )}
           {source.paid && (
-            <span className="rounded bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
+            <span className="rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
               paid
             </span>
           )}
@@ -512,7 +512,7 @@ function ClassBadge({ cls }: { cls: Source['class'] }) {
           : 'bg-surface-subtle text-ink-body';
   return (
     <span
-      className={`rounded px-2 py-0.5 font-mono text-xs uppercase tracking-wider ${tone}`}
+      className={`rounded-sm px-2 py-0.5 font-mono text-xs uppercase tracking-wider ${tone}`}
     >
       {cls}
     </span>
@@ -534,7 +534,7 @@ function LagBadge({ seconds }: { seconds: number }) {
         : `${(seconds / 3600).toFixed(1)}h`;
   return (
     <span
-      className={`inline-flex items-center rounded px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
+      className={`inline-flex items-center rounded-sm px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
     >
       {label}
     </span>

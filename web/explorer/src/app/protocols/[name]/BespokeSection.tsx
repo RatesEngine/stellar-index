@@ -98,11 +98,11 @@ export function BespokeSection({
   return (
     <section
       aria-labelledby="bespoke-heading"
-      className="space-y-4 rounded-xl border border-brand-100 bg-gradient-to-b from-brand-50/60 to-transparent p-4"
+      className="space-y-4 rounded-xl border border-brand-100 bg-linear-to-b from-brand-50/60 to-transparent p-4"
     >
       {/* ── Category chip + heading ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-brand-100 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-brand-700">
+        <span className="rounded-sm bg-brand-100 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-brand-700">
           {bespoke.category}
         </span>
         <h2

@@ -213,13 +213,13 @@ export function AssetsTable({
 
       <p className="text-xs text-ink-muted">
         Live data from{' '}
-        <code className="rounded bg-surface-subtle px-1 font-mono text-[11px]">
+        <code className="rounded-sm bg-surface-subtle px-1 font-mono text-[11px]">
           /v1/assets?asset_class={assetClass}
         </code>
         . Catalogue rows surface first (market-cap desc — fiats top
         the chart), then long-tail Stellar-classic rows by 24h
         volume. Per-asset issuer + on-chain pool detail lives on{' '}
-        <code className="rounded bg-surface-subtle px-1 font-mono text-[11px]">
+        <code className="rounded-sm bg-surface-subtle px-1 font-mono text-[11px]">
           /assets/&#123;slug&#125;
         </code>
         .
@@ -273,7 +273,7 @@ function FilterBar({
             value={q}
             onChange={(e) => onQChange(e.target.value)}
             placeholder="Search by code, slug, or name…"
-            className="w-72 rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-sm placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-72 rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-sm placeholder:text-ink-faint focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
           />
         </div>
         <label className="flex items-center gap-2 text-xs text-ink-muted">
@@ -281,7 +281,7 @@ function FilterBar({
           <select
             value={limit}
             onChange={(e) => onLimitChange(parseInt(e.target.value, 10))}
-            className="rounded-md border border-line bg-surface px-2 py-1 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="rounded-md border border-line bg-surface px-2 py-1 text-xs focus:border-brand-500 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
           >
             <option value={50}>50</option>
             <option value={100}>100</option>

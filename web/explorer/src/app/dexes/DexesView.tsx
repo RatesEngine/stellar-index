@@ -272,7 +272,7 @@ export function DexesView() {
                     <Td>
                       <Link
                         href={`/dexes/${p.source}`}
-                        className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider hover:underline ${tone}`}
+                        className={`inline-block rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider hover:underline ${tone}`}
                       >
                         {p.source}
                       </Link>
