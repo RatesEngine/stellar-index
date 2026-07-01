@@ -89,6 +89,30 @@ data-gated, or are large enough to warrant their own focused change + review.
   decouple), CS-072 (signup enumeration), CS-041/042 (outlier/MEV heuristics)** — Medium/Low,
   no live-safety impact; next-wave candidates.
 
+## Dependabot PR triage (2026-07-01)
+
+19 open Dependabot PRs, all 9+ days stale (2 recurring red checks —
+`govulncheck+gitleaks`, `prometheus rule validation` — were stale artifacts that
+pass on current main). Triaged:
+
+- **Merged (safe — build/lint/test/web all green on the PR):** GitHub Actions
+  minors (setup-go, pnpm-action-setup, golangci-lint-action, buildx); Go modules
+  (google-api, aws-config, aws-s3, coder/websocket); web bumps incl.
+  **tailwind-merge v3** (major — explorer typecheck + install verified clean),
+  next (explorer+status), date-fns, lucide/prettier. Lockfile-conflict cascades
+  resolved via `@dependabot rebase`. Main rebuilt + `go mod verify` clean after
+  the Go bumps.
+- **Deferred #1347 — go-stellar-sdk v0.5→v0.6 (HELD, not merged).** VERSIONS.md
+  mandates a compat pass; v0.6 breaks `datastore.GetFile` (now returns file size
+  `(io.ReadCloser, int64, error)`). Adaptation is contained — `internal/ledgerstream/
+  tiered.go` (`GetFile`/`coldGetFile`), `tiered_test.go:43` (`fakeStore.GetFile`),
+  `cmd/stellarindex-ops/rehydrate_galexie_archive.go:157` — but must be its own
+  reviewed change + VERSIONS.md bump + r1 ingest smoke. PR left open with this note.
+- **#1353 — actions/checkout v6→v7 (major).** Rebased for a fresh CI run: build/
+  lint/unit-tests pass with v7 (all use checkout), so the runner supports it; the
+  lone `Build all Dockerfiles` failure is flaky Docker-build noise (that job runs
+  only on PRs). Merge if the fresh run is green.
+
 ## Verification
 Every code fix built + its package tests passed at commit time; `bash
 scripts/dev/verify.sh` run before the batch pushes. Explorer changes `tsc`-clean.
