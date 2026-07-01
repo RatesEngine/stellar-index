@@ -154,7 +154,7 @@ func rehydrateGalexieArchive(args []string) error { //nolint:gocognit,gocyclo,fu
 		// PutFile's WriterTo contract is satisfied; the LCM file
 		// sizes are bounded (~tens of KB per file at LedgersPerFile=1
 		// — Galexie's default) so in-memory buffering is fine.
-		rc, err := cold.GetFile(rootCtx, path)
+		rc, _, err := cold.GetFile(rootCtx, path)
 		if err != nil {
 			// Cold-side absent — log + count, don't abort. Operators
 			// inspect missing.count to discover real archive holes

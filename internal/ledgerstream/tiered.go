@@ -117,35 +117,39 @@ func IsNotFound(err error) bool {
 
 // GetFile reads from hot; on IsNotFound, reads from cold.
 // Transient errors from hot propagate without trying cold.
-func (t *TieredDataStore) GetFile(ctx context.Context, path string) (io.ReadCloser, error) {
-	rc, err := t.hot.GetFile(ctx, path)
+//
+// The int64 is the object size in bytes (go-stellar-sdk v0.6 added it to the
+// datastore.DataStore.GetFile contract); we thread the underlying store's
+// value through unchanged.
+func (t *TieredDataStore) GetFile(ctx context.Context, path string) (io.ReadCloser, int64, error) {
+	rc, size, err := t.hot.GetFile(ctx, path)
 	if err == nil {
 		t.observeHot()
-		return rc, nil
+		return rc, size, nil
 	}
 	if !IsNotFound(err) {
 		// Transient hot-side error — fail loud rather than mask.
-		return nil, fmt.Errorf("tiered: hot GetFile %q: %w", path, err)
+		return nil, 0, fmt.Errorf("tiered: hot GetFile %q: %w", path, err)
 	}
 	return t.coldGetFile(ctx, path)
 }
 
-func (t *TieredDataStore) coldGetFile(ctx context.Context, path string) (io.ReadCloser, error) {
+func (t *TieredDataStore) coldGetFile(ctx context.Context, path string) (io.ReadCloser, int64, error) {
 	start := time.Now()
-	rc, cerr := t.cold.GetFile(ctx, path)
+	rc, size, cerr := t.cold.GetFile(ctx, path)
 	elapsed := time.Since(start).Seconds()
 	switch {
 	case cerr == nil:
 		t.observeCold("ok", elapsed)
 		t.bumpTotal("cold")
-		return rc, nil
+		return rc, size, nil
 	case IsNotFound(cerr):
 		t.observeCold("miss", elapsed)
 		t.bumpTotal("both_missing")
-		return nil, cerr
+		return nil, 0, cerr
 	default:
 		t.observeCold("error", elapsed)
-		return nil, fmt.Errorf("tiered: cold GetFile %q: %w", path, cerr)
+		return nil, 0, fmt.Errorf("tiered: cold GetFile %q: %w", path, cerr)
 	}
 }
 

@@ -40,16 +40,16 @@ func newFakeStore(name string) *fakeStore {
 
 func (f *fakeStore) bump(method string) { f.calls[method]++ }
 
-func (f *fakeStore) GetFile(_ context.Context, path string) (io.ReadCloser, error) {
+func (f *fakeStore) GetFile(_ context.Context, path string) (io.ReadCloser, int64, error) {
 	f.bump("GetFile")
 	if err, ok := f.getErr[path]; ok {
-		return nil, err
+		return nil, 0, err
 	}
 	body, ok := f.files[path]
 	if !ok {
-		return nil, os.ErrNotExist
+		return nil, 0, os.ErrNotExist
 	}
-	return io.NopCloser(strings.NewReader(body)), nil
+	return io.NopCloser(strings.NewReader(body)), int64(len(body)), nil
 }
 
 func (f *fakeStore) GetFileMetadata(_ context.Context, path string) (map[string]string, error) {
@@ -136,7 +136,7 @@ func TestTiered_GetFile_HotHit(t *testing.T) {
 	cold.files["ledgers/12345.xdr"] = "COLD-BODY"
 
 	ts := NewTieredDataStore(hot, cold, nil)
-	rc, err := ts.GetFile(context.Background(), "ledgers/12345.xdr")
+	rc, _, err := ts.GetFile(context.Background(), "ledgers/12345.xdr")
 	if err != nil {
 		t.Fatalf("GetFile: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestTiered_GetFile_HotMissColdHit(t *testing.T) {
 	cold.files["ledgers/99999.xdr"] = "COLD-BODY"
 
 	ts := NewTieredDataStore(hot, cold, nil)
-	rc, err := ts.GetFile(context.Background(), "ledgers/99999.xdr")
+	rc, _, err := ts.GetFile(context.Background(), "ledgers/99999.xdr")
 	if err != nil {
 		t.Fatalf("GetFile: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestTiered_GetFile_BothMissing(t *testing.T) {
 	cold := newFakeStore("cold")
 
 	ts := NewTieredDataStore(hot, cold, nil)
-	_, err := ts.GetFile(context.Background(), "ledgers/00000.xdr")
+	_, _, err := ts.GetFile(context.Background(), "ledgers/00000.xdr")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -196,7 +196,7 @@ func TestTiered_GetFile_HotTransientError_DoesNotFallThrough(t *testing.T) {
 	hot.getErr["ledgers/55555.xdr"] = transient
 
 	ts := NewTieredDataStore(hot, cold, nil)
-	_, err := ts.GetFile(context.Background(), "ledgers/55555.xdr")
+	_, _, err := ts.GetFile(context.Background(), "ledgers/55555.xdr")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
