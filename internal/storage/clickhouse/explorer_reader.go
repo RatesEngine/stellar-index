@@ -177,6 +177,13 @@ type OpRow struct {
 
 const opCols = `ledger_seq, close_time, tx_hash, tx_index, op_index, op_type, source_account, body_xdr`
 
+// opColsLight omits body_xdr — the large per-row column whose read dominates
+// the query cost (a bare ledger_seq DESC LIMIT is ~40ms; adding body_xdr over
+// this 24B-row / 2TiB table is ~600ms). Used by RecentOperations so the
+// network-wide directory listing stays cheap; op_type still carries the type,
+// and the per-ledger / detail views read the full body when they need it.
+const opColsLight = `ledger_seq, close_time, tx_hash, tx_index, op_index, op_type, source_account`
+
 func scanOps(rows driver.Rows) ([]OpRow, error) {
 	var out []OpRow
 	for rows.Next() {
@@ -190,15 +197,32 @@ func scanOps(rows driver.Rows) ([]OpRow, error) {
 	return out, rows.Err()
 }
 
+// scanOpsLight scans the opColsLight column set (no body_xdr; BodyXDR stays "").
+func scanOpsLight(rows driver.Rows) ([]OpRow, error) {
+	var out []OpRow
+	for rows.Next() {
+		var o OpRow
+		if err := rows.Scan(&o.Seq, &o.CloseTime, &o.TxHash, &o.TxIndex, &o.OpIndex,
+			&o.OpType, &o.SourceAccount); err != nil {
+			return nil, fmt.Errorf("clickhouse: scan op (light): %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 // RecentOperations returns the most-recent operations network-wide,
 // newest first, keyset-paged by the composite (ledger_seq, tx_index,
 // op_index) cursor. A bare reverse scan from the tip of the table's
 // sort key — fast, no extra index. Backs the /v1/operations directory.
+// Returns the LIGHT column set (opColsLight — no body_xdr); the returned
+// OpRow.BodyXDR is always "". The directory is a summary listing; callers
+// needing the decoded body use the per-ledger / per-tx paths.
 func (r *ExplorerReader) RecentOperations(ctx context.Context, limit int, cur ExplorerCursor) ([]OpRow, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT ` + opCols + ` FROM stellar.operations`
+	q := `SELECT ` + opColsLight + ` FROM stellar.operations`
 	args := []any{}
 	if cur.IsSet() {
 		q += ` WHERE (ledger_seq, tx_index, op_index) < (?, ?, ?)`
@@ -211,7 +235,7 @@ func (r *ExplorerReader) RecentOperations(ctx context.Context, limit int, cur Ex
 		return nil, fmt.Errorf("clickhouse: recent operations: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	return scanOps(rows)
+	return scanOpsLight(rows)
 }
 
 // OpTypeCount is one op-type's count in the stats window.

@@ -27,6 +27,23 @@ type OpView struct {
 	ResultCode *int32 `json:"result_code,omitempty"`
 }
 
+// opViewLight is the summary shape for the network-wide operations directory:
+// the identity + op type (from the lake's op_type column), WITHOUT decoding the
+// XDR body. The directory omits `fields`/`raw_xdr` on purpose — decoding every
+// op's body meant reading the large body_xdr column over a 24B-row table
+// (~600ms); the per-op fields live on the per-ledger view + /v1/tx/{hash}.
+func opViewLight(o clickhouse.OpRow) OpView {
+	return OpView{
+		Ledger:        o.Seq,
+		CloseTime:     o.CloseTime.UTC().Format(time.RFC3339),
+		TxHash:        o.TxHash,
+		TxIndex:       o.TxIndex,
+		OpIndex:       o.OpIndex,
+		SourceAccount: o.SourceAccount,
+		Type:          normalizeLakeOpType(o.OpType),
+	}
+}
+
 // opView decodes an operation row's XDR body into the wire shape. On decode
 // failure it degrades to the lake's (normalised) op type + the raw body, so a
 // single malformed/unknown op never fails the response.
@@ -190,7 +207,7 @@ func (s *Server) handleOperationsDirectory(w http.ResponseWriter, r *http.Reques
 	}
 	out := OperationsView{Operations: make([]OpView, len(rows))}
 	for i, o := range rows {
-		out.Operations[i] = opView(o)
+		out.Operations[i] = opViewLight(o) // directory = summary; body fields on the detail views
 	}
 	if n := len(rows); n == limit {
 		last := rows[n-1]

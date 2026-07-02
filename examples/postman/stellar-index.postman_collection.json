@@ -21535,7 +21535,7 @@
           "request": {
             "name": "Operations — a ledger's ops, or the network-wide recent directory.",
             "description": {
-              "content": "Two shapes on one route:\n\n- **`?ledger=<seq>`** — that ledger's operations, each decoded from XDR\n  (partition-pruned; `?limit=` up to 2000, default 500).\n- **no `?ledger`** — the network-wide recent-operations DIRECTORY:\n  newest first, keyset-paged via `?cursor=<opaque>` (echo back\n  `next_cursor`; composite `ledger.tx_index.op_index`), plus\n  `op_type_stats` — the per-op-type counts over the trailing ~24h of\n  ledgers (first page only). `?limit=` up to 200, default 50.\n",
+              "content": "Two shapes on one route:\n\n- **`?ledger=<seq>`** — that ledger's operations, each decoded from XDR\n  (partition-pruned; `?limit=` up to 2000, default 500). Includes the\n  decoded body (`fields` / `raw_xdr`).\n- **no `?ledger`** — the network-wide recent-operations DIRECTORY:\n  newest first, keyset-paged via `?cursor=<opaque>` (echo back\n  `next_cursor`; composite `ledger.tx_index.op_index`), plus\n  `op_type_stats` — the per-op-type counts over the trailing ~24h of\n  ledgers (first page only). `?limit=` up to 200, default 50. This is a\n  **summary** shape: each op carries its identity + `type` but NOT the\n  decoded body (`fields` / `raw_xdr` are omitted) — decoding every op's\n  body over the multi-billion-row lake made the directory ~10× slower.\n  Fetch the full decoded op from the per-ledger form above or\n  `/v1/tx/{hash}`.\n",
               "type": "text/plain"
             },
             "url": {

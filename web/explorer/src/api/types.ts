@@ -6159,12 +6159,18 @@ export interface paths {
          * @description Two shapes on one route:
          *
          *     - **`?ledger=<seq>`** — that ledger's operations, each decoded from XDR
-         *       (partition-pruned; `?limit=` up to 2000, default 500).
+         *       (partition-pruned; `?limit=` up to 2000, default 500). Includes the
+         *       decoded body (`fields` / `raw_xdr`).
          *     - **no `?ledger`** — the network-wide recent-operations DIRECTORY:
          *       newest first, keyset-paged via `?cursor=<opaque>` (echo back
          *       `next_cursor`; composite `ledger.tx_index.op_index`), plus
          *       `op_type_stats` — the per-op-type counts over the trailing ~24h of
-         *       ledgers (first page only). `?limit=` up to 200, default 50.
+         *       ledgers (first page only). `?limit=` up to 200, default 50. This is a
+         *       **summary** shape: each op carries its identity + `type` but NOT the
+         *       decoded body (`fields` / `raw_xdr` are omitted) — decoding every op's
+         *       body over the multi-billion-row lake made the directory ~10× slower.
+         *       Fetch the full decoded op from the per-ledger form above or
+         *       `/v1/tx/{hash}`.
          */
         get: {
             parameters: {
