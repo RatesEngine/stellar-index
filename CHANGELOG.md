@@ -15,6 +15,28 @@ against.
 
 ## [Unreleased]
 
+## [v0.6.1] — 2026-07-02
+
+### Changed
+- **`/v1/operations` network-wide directory is now a summary (~10× faster).**
+  The no-`?ledger` directory listing previously read the large `body_xdr`
+  column and XDR-decoded every op, which dominated latency over the
+  multi-billion-row lake (~430ms regardless of `limit`). It now returns each
+  op's identity + `type` only — `fields`/`raw_xdr` are omitted (they were
+  already `omitempty`). Fetch the fully-decoded op from the per-ledger form
+  (`?ledger=<seq>`) or `/v1/tx/{hash}`. The explorer already degrades cleanly
+  (its per-op summary was best-effort). No change to the per-ledger op view.
+
+### Fixed
+- **Latency-SLO burn alerts no longer false-fire at near-zero traffic.** Added a
+  min-traffic guard (`and rate > 5 req/s`) to the pricing-latency burn alerts —
+  at synthetic-only traffic (~2.4 req/s smoke+prewarm) a few cold-cache outliers
+  tripped the 0.1% budget. (Applied live to r1 monitoring.)
+- **`ecb` FX reference no longer false-fires `data_source_stale`.** ECB is a
+  daily source (publishes on business days only) but sat under the oracle
+  domain's 3h freshness threshold; gave it a 4-day threshold. It was healthy all
+  along (writes to `oracle_updates` on its daily cadence).
+
 ## [v0.6.0] — 2026-07-01
 
 Minor bump for the **breaking** LC-001 assets split (`/v1/assets` is now
